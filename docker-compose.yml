@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  # --------------------------------------------------------
+  # NODO 1: CORPORATIVO (Escazú) - Puerto Host: 1433
+  # --------------------------------------------------------
+  corporativo:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: nodo_corporativo
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=TuPassword
+      - MSSQL_PID=Developer
+      - MSSQL_AGENT_ENABLED=True
+    ports:
+      - "1433:1433"
+    volumes:
+      - ./data_corp/data:/var/opt/mssql/data
+      - ./data_corp/log:/var/opt/mssql/log
+      - ./data_corp/secrets:/var/opt/mssql/secrets
+      - ./data_corp/backup:/var/opt/mssql/backup
+      - ./data_corp/repldata:/var/opt/mssql/ReplData
+    networks:
+      - wwi_network
+
+  # --------------------------------------------------------
+  # NODO 2: SUCURSAL SAN JOSÉ - Puerto Host: 1434
+  # --------------------------------------------------------
+  sucursal_sj:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: nodo_sucursal_sj
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=TuPassword
+      - MSSQL_PID=Developer
+      - MSSQL_AGENT_ENABLED=True
+    ports:
+      - "1434:1433"
+    volumes:
+      - ./data_sj/data:/var/opt/mssql/data
+      - ./data_sj/log:/var/opt/mssql/log
+      - ./data_sj/secrets:/var/opt/mssql/secrets
+      - ./data_sj/backup:/var/opt/mssql/backup
+      - ./data_sj/repldata:/var/opt/mssql/ReplData
+    networks:
+      - wwi_network
+
+  # --------------------------------------------------------
+  # NODO 3: SUCURSAL LIMÓN - Puerto Host: 1435
+  # --------------------------------------------------------
+  sucursal_limon:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: nodo_sucursal_limon
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=TuPassword
+      - MSSQL_PID=Developer
+      - MSSQL_AGENT_ENABLED=True
+    ports:
+      - "1435:1433"
+    volumes:
+      - ./data_limon/data:/var/opt/mssql/data
+      - ./data_limon/log:/var/opt/mssql/log
+      - ./data_limon/secrets:/var/opt/mssql/secrets
+      - ./data_limon/backup:/var/opt/mssql/backup
+      - ./data_limon/repldata:/var/opt/mssql/ReplData
+    networks:
+      - wwi_network
+
+# Definición de la red virtual para que los nodos se comuniquen entre sí
+networks:
+  wwi_network:
+    driver: bridge
