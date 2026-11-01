@@ -30,11 +30,11 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
-import PersonSearchIcon from '@mui/icons-material/PersonSearch';
-import LeaderboardIcon from '@mui/icons-material/Leaderboard';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import HandshakeIcon from '@mui/icons-material/Handshake';
-import SendIcon from '@mui/icons-material/Send';
+import PersonSearchIcon from "@mui/icons-material/PersonSearch";
+import LeaderboardIcon from "@mui/icons-material/Leaderboard";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import HandshakeIcon from "@mui/icons-material/Handshake";
+import SendIcon from "@mui/icons-material/Send";
 
 import ControlesPaginacionTabla from "../../components/ControlesPaginacionTabla";
 import AutocompletePaginado from "../../components/AutocompletePaginado";
@@ -188,7 +188,20 @@ const CONFIG_REPORTES = [
     desc: "Resumen de ventas de categorías de productos por año.",
     Icono: TrendingUpIcon,
     etiqueta: "Resumen",
-    inputs: [],
+    inputs: [
+      {
+        campo: "anioInicio",
+        label: "Año inicial",
+        source: "aniosFacturas",
+        tipo: "entero",
+      },
+      {
+        campo: "anioFin",
+        label: "Año final",
+        source: "aniosFacturas",
+        tipo: "entero",
+      },
+    ],
   },
 
   {
@@ -666,15 +679,15 @@ export default function Reportes({
     const cargarCatalogos = async () => {
       try {
         const [aniosData, opcionesReportes] = await Promise.all([
-            solicitarJson("/api/reportes/opciones/anios"),
-            solicitarJson("/api/reportes/opciones"),
+          solicitarJson("/api/reportes/opciones/anios"),
+          solicitarJson("/api/reportes/opciones"),
         ]);
 
         setAnios(
-            aniosData.map((item) => ({
-              value: String(item.Anio),
-              label: String(item.Anio),
-            })),
+          aniosData.map((item) => ({
+            value: String(item.Anio),
+            label: String(item.Anio),
+          })),
         );
 
         setAniosFacturas(
@@ -690,7 +703,6 @@ export default function Reportes({
             label: String(item.Anio),
           })),
         );
-
       } catch (error) {
         mostrarError(
           error,
@@ -740,9 +752,6 @@ export default function Reportes({
   /**
    * Ejecuta el reporte seleccionado.
    *
-   * El frontend únicamente arma los parámetros.
-   * Los cálculos y transformaciones se mantienen
-   * en SQL Server.
    * @param {number} paginaSolicitada Número base cero de la página.
    * @param {number} filasSolicitadas Cantidad de filas que se solicitarán.
    * @returns {Promise<void>} Actualiza los resultados del reporte.
@@ -758,25 +767,23 @@ export default function Reportes({
     const filtrosAnio = reporteActual.inputs.filter((input) =>
       ["anio", "anioInicio", "anioFin"].includes(input.campo),
     );
+
     const anioInvalido = filtrosAnio.some((input) => {
       const valor = filtros[input.campo];
       const opcionesAnios = obtenerOpciones(input.source);
       return (
         valor &&
+        input.tipo === "opciones" &&
         !opcionesAnios.some((opcion) => String(opcion.value) === String(valor))
       );
     });
 
     if (anioInvalido) {
       const error = new Error(
-        "Selecciona años válidos presentes en los datos del reporte.",
+        "Seleccione años válidos presentes en los datos del reporte.",
       );
 
-      mostrarError(
-        error,
-        onErrorNotificacion,
-        onErrorOcultarModulo,
-      );
+      mostrarError(error, onErrorNotificacion, onErrorOcultarModulo);
 
       return;
     }
@@ -790,11 +797,7 @@ export default function Reportes({
         "El año inicial no puede ser mayor que el año final.",
       );
 
-      mostrarError(
-        error,
-        onErrorNotificacion,
-        onErrorOcultarModulo,
-      );
+      mostrarError(error, onErrorNotificacion, onErrorOcultarModulo);
 
       return;
     }
@@ -807,11 +810,7 @@ export default function Reportes({
           "El mes debe ser un número entero entre 1 y 12.",
         );
 
-        mostrarError(
-          error,
-          onErrorNotificacion,
-          onErrorOcultarModulo,
-        );
+        mostrarError(error, onErrorNotificacion, onErrorOcultarModulo);
 
         return;
       }
@@ -884,7 +883,9 @@ export default function Reportes({
           onChange={(nuevoValor) =>
             actualizarFiltro(
               input.campo,
-              input.tipo === "opciones" ? String(nuevoValor?.id ?? "") : nuevoValor,
+              input.tipo === "opciones"
+                ? String(nuevoValor?.id ?? "")
+                : nuevoValor,
             )
           }
         />
@@ -1276,7 +1277,10 @@ export default function Reportes({
                         px: 3,
                         boxShadow: "none",
                         backgroundColor: "#284272",
-                        "&:hover": { backgroundColor: "#1d3158", boxShadow: "none" },
+                        "&:hover": {
+                          backgroundColor: "#1d3158",
+                          boxShadow: "none",
+                        },
                       }}
                     >
                       {generando ? "Generando…" : "Generar reporte"}
@@ -1302,7 +1306,10 @@ export default function Reportes({
                       fontWeight: 600,
                       boxShadow: "none",
                       backgroundColor: "#284272",
-                      "&:hover": { backgroundColor: "#1d3158", boxShadow: "none" },
+                      "&:hover": {
+                        backgroundColor: "#1d3158",
+                        boxShadow: "none",
+                      },
                     }}
                   >
                     {generando ? "Generando…" : "Generar reporte"}
@@ -1357,7 +1364,6 @@ export default function Reportes({
                     Información devuelta directamente por la base de datos.
                   </Typography>
                 </Box>
-
               </Stack>
 
               <TablaReporteDinamica

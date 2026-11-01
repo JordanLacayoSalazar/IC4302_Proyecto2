@@ -144,9 +144,18 @@ const getReporte5 = async (req, res) => {
  */
 const getReporte6 = async (req, res) => {
   try {
+    const anioInicio = leerEnteroOpcional(req.query.anioInicio, "anioInicio", {
+      min: 1900,
+    });
+    const anioFin = leerEnteroOpcional(req.query.anioFin, "anioFin", {
+      min: 1900,
+    });
+
     const pool = await conectarBaseDatos();
 
     const result = await agregarPaginacion(pool.request(), req.query)
+      .input("AnioInicio", sql.Int, anioInicio)
+      .input("AnioFin", sql.Int, anioFin)
       .execute("ObtenerReporte6");
 
     res.json(crearRespuestaPaginada(result.recordsets, req.query));

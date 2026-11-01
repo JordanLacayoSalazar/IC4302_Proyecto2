@@ -471,42 +471,75 @@ GO
 -- Requisitos : resumen tipo matriz por categorías y años vendidos.
 -- ================================================================
 CREATE OR ALTER PROCEDURE ObtenerReporte6
+    @AnioInicio INT = NULL,
+    @AnioFin INT = NULL,
     @Pagina INT = 0,
     @FilasPorPagina INT = 10
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
-SELECT
-                Categoria,
-                ISNULL([2013], 0) AS Ventas_2013,
-                ISNULL([2014], 0) AS Ventas_2014,
-                ISNULL([2015], 0) AS Ventas_2015,
-                ISNULL([2016], 0) AS Ventas_2016
-        FROM
-            (
-                SELECT
-                    sg.StockGroupName AS Categoria,
-                    YEAR(i.InvoiceDate) AS Anio,
-                    il.ExtendedPrice + il.TaxAmount AS Monto
-                FROM syn_Facturas AS i
-                INNER JOIN syn_LineasFactura AS il
-                    ON i.InvoiceID = il.InvoiceID
-                INNER JOIN syn_ProductoGrupos AS pig
-                    ON il.StockItemID = pig.StockItemID
-                INNER JOIN syn_GruposProducto AS sg
-                    ON pig.StockGroupID = sg.StockGroupID
-                WHERE YEAR(i.InvoiceDate) BETWEEN 2013 AND 2016
-            ) AS DatosBase
-            PIVOT
-            (
-                SUM(Monto)
-                FOR Anio IN ([2013], [2014], [2015], [2016])
-            ) AS Matriz
-    ORDER BY Categoria ASC
-    OFFSET (@Pagina * @FilasPorPagina) ROWS
-    FETCH NEXT @FilasConIndicador ROWS ONLY;
+    DECLARE @ColumnasPivot NVARCHAR(MAX);
+    DECLARE @ColumnasSelect NVARCHAR(MAX);
+    DECLARE @SQL NVARCHAR(MAX);
+
+    SELECT @ColumnasPivot = STUFF((
+        SELECT ', ' + QUOTENAME(CAST(YEAR(InvoiceDate) AS NVARCHAR(4)))
+        FROM syn_Facturas
+        WHERE InvoiceDate IS NOT NULL
+          AND (@AnioInicio IS NULL OR YEAR(InvoiceDate) >= @AnioInicio)
+          AND (@AnioFin IS NULL OR YEAR(InvoiceDate) <= @AnioFin)
+        GROUP BY YEAR(InvoiceDate)
+        ORDER BY YEAR(InvoiceDate) ASC
+        FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
+
+    SELECT @ColumnasSelect = STUFF((
+        SELECT ', ISNULL(' + QUOTENAME(CAST(YEAR(InvoiceDate) AS NVARCHAR(4))) + ', 0) AS [Ventas_' + CAST(YEAR(InvoiceDate) AS NVARCHAR(4)) + ']'
+        FROM syn_Facturas
+        WHERE InvoiceDate IS NOT NULL
+          AND (@AnioInicio IS NULL OR YEAR(InvoiceDate) >= @AnioInicio)
+          AND (@AnioFin IS NULL OR YEAR(InvoiceDate) <= @AnioFin)
+        GROUP BY YEAR(InvoiceDate)
+        ORDER BY YEAR(InvoiceDate) ASC
+        FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
+
+    IF @ColumnasPivot IS NOT NULL AND LEN(@ColumnasPivot) > 0
+    BEGIN
+        SET @SQL = N'
+        DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
+        
+        WITH DatosBase AS (
+            SELECT
+                sg.StockGroupName AS Categoria,
+                YEAR(i.InvoiceDate) AS Anio,
+                il.ExtendedPrice + il.TaxAmount AS Monto
+            FROM syn_Facturas AS i
+            INNER JOIN syn_LineasFactura AS il ON i.InvoiceID = il.InvoiceID
+            INNER JOIN syn_ProductoGrupos AS pig ON il.StockItemID = pig.StockItemID
+            INNER JOIN syn_GruposProducto AS sg ON pig.StockGroupID = sg.StockGroupID
+            WHERE i.InvoiceDate IS NOT NULL
+              AND (@AnioInicio IS NULL OR YEAR(i.InvoiceDate) >= @AnioInicio)
+              AND (@AnioFin IS NULL OR YEAR(i.InvoiceDate) <= @AnioFin)
+        )
+        SELECT Categoria, ' + @ColumnasSelect + N'
+        FROM DatosBase
+        PIVOT (
+            SUM(Monto)
+            FOR Anio IN (' + @ColumnasPivot + N')
+        ) AS Matriz
+        ORDER BY Categoria ASC
+        OFFSET (@Pagina * @FilasPorPagina) ROWS
+        FETCH NEXT @FilasConIndicador ROWS ONLY;
+        ';
+
+        EXEC sp_executesql @SQL, 
+            N'@AnioInicio INT, @AnioFin INT, @Pagina INT, @FilasPorPagina INT', 
+            @AnioInicio, @AnioFin, @Pagina, @FilasPorPagina;
+    END
+    ELSE
+    BEGIN
+        SELECT TOP 0 'Categoria' AS Categoria;
+    END
 END;
 GO
 
@@ -676,79 +709,53 @@ CREATE OR ALTER PROCEDURE ObtenerReporte9
 AS
 BEGIN
     SET NOCOUNT ON;
-
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
-    IF @Anio IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM syn_Facturas WHERE YEAR(InvoiceDate) = @Anio)
-        THROW 50204, 'El año indicado no existe en las facturas de la base de datos.', 1;
 
-
-    WITH ProductosVendidos AS
+    WITH VentasPorProducto AS
     (
-        SELECT
-            si.StockItemID,
-            si.StockItemName AS Producto,
-            grupo.StockGroupName AS Categoria,
-            s.SupplierName AS Proveedor,
-            YEAR(i.InvoiceDate) AS Anio,
+        SELECT 
+            il.StockItemID,
             SUM(il.Quantity) AS TotalVendido
         FROM syn_Facturas AS i
-        INNER JOIN syn_LineasFactura AS il
-            ON i.InvoiceID = il.InvoiceID
-        INNER JOIN syn_Productos AS si
-            ON il.StockItemID = si.StockItemID
-        INNER JOIN syn_Proveedores AS s
-            ON si.SupplierID = s.SupplierID
-        OUTER APPLY
-        (
-            SELECT TOP (1)
-                sg.StockGroupName
-            FROM syn_ProductoGrupos AS pig
-            INNER JOIN syn_GruposProducto AS sg
-                ON pig.StockGroupID = sg.StockGroupID
-            WHERE pig.StockItemID = si.StockItemID
-            ORDER BY sg.StockGroupName ASC
-        ) AS grupo
-        WHERE
-            (@Anio IS NULL OR YEAR(i.InvoiceDate) = @Anio)
-            AND
-            (
-                NULLIF(LTRIM(RTRIM(@Proveedor)), '') IS NULL
-                OR s.SupplierName LIKE '%' + LTRIM(RTRIM(@Proveedor)) + '%'
-            )
-            AND
-            (
-                NULLIF(LTRIM(RTRIM(@CategoriaProducto)), '') IS NULL
-                OR grupo.StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%'
-            )
-        GROUP BY
-            si.StockItemID,
-            si.StockItemName,
-            grupo.StockGroupName,
-            s.SupplierName,
-            YEAR(i.InvoiceDate)
+        INNER JOIN syn_LineasFactura AS il ON i.InvoiceID = il.InvoiceID
+        WHERE (@Anio IS NULL OR YEAR(i.InvoiceDate) = @Anio)
+        GROUP BY il.StockItemID
     )
-SELECT
-                pv.Producto,
-                pv.Categoria,
-                pv.Proveedor,
-                pv.Anio,
-                ISNULL(holdings.QuantityOnHand, 0) AS InventarioActual,
-                pv.TotalVendido,
-                CASE
-                    WHEN pv.TotalVendido > 0
-                        THEN CAST((ISNULL(holdings.QuantityOnHand, 0) * 365.0) / pv.TotalVendido AS DECIMAL(10,2))
-                    ELSE 0
-                END AS PromedioDiasRotacion
-        FROM ProductosVendidos AS pv
-            LEFT JOIN syn_Inventario AS holdings
-                ON pv.StockItemID = holdings.StockItemID
+    SELECT
+        si.StockItemName AS Producto,
+        grupo.StockGroupName AS Categoria,
+        s.SupplierName AS Proveedor,
+        ISNULL(@Anio, YEAR(GETDATE())) AS Anio,
+        ISNULL(holdings.QuantityOnHand, 0) AS InventarioActual,
+        v.TotalVendido,
+        
+        CASE
+            WHEN v.TotalVendido > 0
+                THEN CAST((ISNULL(holdings.QuantityOnHand, 0) * 365.0) / v.TotalVendido AS DECIMAL(10,2))
+            ELSE 0
+        END AS PromedioDiasRotacion
+        
+    FROM VentasPorProducto AS v 
+    INNER JOIN syn_Productos AS si ON v.StockItemID = si.StockItemID
+    INNER JOIN syn_Proveedores AS s ON si.SupplierID = s.SupplierID
+    LEFT JOIN syn_Inventario AS holdings ON si.StockItemID = holdings.StockItemID
+    OUTER APPLY
+    (
+        SELECT TOP (1) sg.StockGroupName
+        FROM syn_ProductoGrupos AS pig
+        INNER JOIN syn_GruposProducto AS sg ON pig.StockGroupID = sg.StockGroupID
+        WHERE pig.StockItemID = si.StockItemID
+        ORDER BY sg.StockGroupName ASC
+    ) AS grupo
+    WHERE 
+        (NULLIF(LTRIM(RTRIM(@Proveedor)), '') IS NULL OR s.SupplierName LIKE '%' + LTRIM(RTRIM(@Proveedor)) + '%')
+        AND 
+        (NULLIF(LTRIM(RTRIM(@CategoriaProducto)), '') IS NULL OR grupo.StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%')
     ORDER BY PromedioDiasRotacion DESC, Producto ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
 END;
 GO
-
 
 /*
 ================================================================================
