@@ -28,7 +28,6 @@ import ModuloInterfazBase from "../../components/ModuloInterfazBase";
 import { mostrarError } from "../../components/ModuloHerramientas";
 import {
   construirQuery,
-  normalizarRespuestaPaginada,
   solicitarJson,
 } from "../../components/apiHerramientas";
 import ModalFormularioCliente from "./ModalFormularioCliente";
@@ -40,11 +39,14 @@ import ModalConfirmacion from "../../components/ModalConfirmacion";
  * @param {object} props Manejadores de notificaciones y control del módulo.
  * @param {Function} props.onErrorNotificacion Notifica errores al usuario.
  * @param {Function} props.onErrorOcultarModulo Oculta el módulo si el error lo requiere.
+ * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
  * @returns {JSX.Element} Interfaz de gestión de clientes.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function Clientes({
   onErrorNotificacion,
   onErrorOcultarModulo,
+  onVolverCentroGestion,
 }) {
   const [clientes, setClientes] = useState([]);
   const [filtroNombre, setFiltroNombre] = useState("");
@@ -61,14 +63,17 @@ export default function Clientes({
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false);
   const [pagina, setPagina] = useState(0);
   const [cantidadFilasPorPagina, setCantidadFilasPorPagina] = useState(5);
-  const [hayMas, setHayMas] = useState(false);
+  const [hayMasFilas, setHayMasFilas] = useState(false);
 
   /**
    * Consulta clientes con los filtros seleccionados y vuelve a la primera página.
    * @param {string} [nombre=""] Texto opcional para filtrar clientes.
    * @param {string} [categoria=""] Categoría seleccionada.
    * @param {string} [metodoEntrega=""] Método de entrega seleccionado.
+   * @param {number} [paginaSolicitada=0] Índice base cero de la página.
+   * @param {number} [filasSolicitadas=cantidadFilasPorPagina] Filas por página.
    * @returns {Promise<void>} Completa la solicitud y actualiza el estado.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const fetchClientes = useCallback(
     async (
@@ -89,9 +94,8 @@ export default function Clientes({
           })}`,
         );
 
-        const pagina = normalizarRespuestaPaginada(resultado);
-        setClientes(pagina.datos);
-        setHayMas(pagina.hayMas);
+        setClientes(resultado.datos);
+        setHayMasFilas(resultado.hayMasFilas);
         setPagina(paginaSolicitada);
       } catch (error) {
         mostrarError(
@@ -108,6 +112,7 @@ export default function Clientes({
   /**
    * Carga categorías y métodos de entrega para los filtros de la tabla.
    * @returns {Promise<void>} Actualiza las opciones de los filtros.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const fetchOpcionesFormulario = useCallback(async () => {
     try {
@@ -126,6 +131,7 @@ export default function Clientes({
   /**
    * Abre el formulario vacío para registrar un cliente nuevo.
    * @returns {void} Reinicia el formulario y muestra el modal.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirFormularioNuevo = () => {
     setModoEdicion(false);
@@ -138,6 +144,7 @@ export default function Clientes({
    * Obtiene los datos del cliente y abre el formulario en modo edición.
    * @param {object} cliente Fila del cliente, con CustomerID.
    * @returns {Promise<void>} Carga el formulario o notifica el error.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirFormularioEdicion = async (cliente) => {
     try {
@@ -190,6 +197,7 @@ export default function Clientes({
    * @param {import('react').ChangeEvent<HTMLInputElement | HTMLTextAreaElement>} evento
    *   Evento de cambio del campo.
    * @returns {void} Actualiza el formulario y normaliza sus valores.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const manejarCambioFormulario = (evento) => {
     let valor = evento.target.value;
@@ -226,6 +234,7 @@ export default function Clientes({
    * @param {number|null} latitud Latitud seleccionada.
    * @param {number|null} longitud Longitud seleccionada.
    * @returns {void} Guarda las coordenadas en el estado del formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const manejarUbicacionCapturada = (latitud, longitud) => {
     setFormData((datosAnteriores) => ({
@@ -238,6 +247,7 @@ export default function Clientes({
   /**
    * Crea o actualiza el cliente y vuelve a cargar la lista.
    * @returns {Promise<void>} Completa el guardado y actualiza la interfaz.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const guardarCliente = async () => {
     const url = modoEdicion
@@ -247,6 +257,7 @@ export default function Clientes({
      * Separa una dirección multilínea en sus dos campos de almacenamiento.
      * @param {string|null|undefined} direccion Dirección escrita en el formulario.
      * @returns {{linea1: string|null, linea2: string|null}} Líneas de dirección.
+     * @throws {Error} Si ocurre un error no controlado durante la ejecución.
      */
     const separarDireccion = (direccion) => {
       const lineas = String(direccion ?? "").split(/\r?\n/);
@@ -291,6 +302,7 @@ export default function Clientes({
    * Solicita confirmación y elimina el cliente seleccionado.
    * @param {number|string} id Identificador del cliente.
    * @returns {Promise<void>} Completa la eliminación y recarga la lista.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const ejecutarEliminacion = async () => {
     if (!clienteAEliminar) return;
@@ -324,6 +336,7 @@ export default function Clientes({
   /**
    * Limpia los tres filtros y vuelve a cargar todos los clientes.
    * @returns {void} Restablece los filtros y consulta la primera página.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const restaurarFiltros = () => {
     setFiltroNombre("");
@@ -336,6 +349,7 @@ export default function Clientes({
    * Carga y abre el modal con el detalle del cliente indicado.
    * @param {number|string} id Identificador del cliente.
    * @returns {Promise<void>} Abre el detalle o muestra un error.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirDetalle = async (id) => {
     try {
@@ -439,8 +453,10 @@ export default function Clientes({
       titulo="Gestión de Clientes"
       descripcion="Consulta y administra los clientes registrados"
       Icono={GroupsOutlinedIcon}
-      IconoBoton={PersonAddIcon}
-      textoBoton="Nuevo cliente"
+      onVolver={onVolverCentroGestion}
+      textoBotonVolver="Volver al centro de gestión"
+      IconoBotonCrear={PersonAddIcon}
+      textoBotonCrear="Nuevo cliente"
       onCrear={abrirFormularioNuevo}
     >
       {/* Filtros para buscar clientes por nombre, categoría y método de entrega. */}
@@ -611,7 +627,7 @@ export default function Clientes({
           <ControlesPaginacionTabla
             pagina={pagina}
             filasPorPagina={cantidadFilasPorPagina}
-            hayMas={hayMas}
+            hayMasFilas={hayMasFilas}
             onCambiarPagina={(_, nuevaPagina) => fetchClientes(
               filtroNombre, filtroCategoria, filtroMetodoEntrega,
               nuevaPagina, cantidadFilasPorPagina,
@@ -635,6 +651,9 @@ export default function Clientes({
         abierto={modalFormularioAbierto}
         onClose={() => setModalFormularioAbierto(false)}
         modoEdicion={modoEdicion}
+        IconoCrear={PersonAddIcon}
+        IconoEditar={EditIcon}
+        IconoModulo={GroupsOutlinedIcon}
         formData={formData}
         manejarCambio={manejarCambioFormulario}
         manejarUbicacionCapturada={manejarUbicacionCapturada}

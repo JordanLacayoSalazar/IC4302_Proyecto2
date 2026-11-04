@@ -18,6 +18,12 @@ import ShoppingBagIcon from "@mui/icons-material/ShoppingBag";
 import CampoDetalle from "../../components/CampoDetalle";
 import ModalInterfazBase from "../../components/ModalInterfazBase";
 
+/**
+ * Formatea un importe con símbolo de moneda y dos decimales.
+ * @param {number|string|null} valor Importe recibido.
+ * @returns {string} Importe con formato monetario.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 const formatearDinero = (valor) =>
   `$${Number(valor || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -26,8 +32,9 @@ const formatearDinero = (valor) =>
 
 /**
  * Formatea una fecha de base de datos sin cambiar su día calendario.
- * @param {string|Date|null|undefined} fecha Fecha recibida.
+ * @param {string|Date|null|undefined} fecha Fecha de la factura.
  * @returns {string|null} Fecha legible o null si no se indicó.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 const formatearFecha = (fecha) => {
   if (!fecha) return null;
@@ -45,6 +52,7 @@ const formatearFecha = (fecha) => {
  * @param {Function} props.onClose Cierra el modal.
  * @param {object|null} props.venta Encabezado y líneas de la factura.
  * @returns {JSX.Element|null} Detalle de la venta o null si no hay datos.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function ModalDetallesVenta({
   abierto,

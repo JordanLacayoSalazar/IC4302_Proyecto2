@@ -21,12 +21,12 @@ import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import ControlesPaginacionTabla from "../../components/ControlesPaginacionTabla";
 import ModuloInterfazBase from "../../components/ModuloInterfazBase";
 import { mostrarError } from "../../components/ModuloHerramientas";
 import {
   construirQuery,
-  normalizarRespuestaPaginada,
   solicitarJson,
 } from "../../components/apiHerramientas";
 import ModalDetallesVenta from "./ModalDetallesVenta";
@@ -48,6 +48,7 @@ const FILTROS_INICIALES = {
  * Formatea fechas SQL YYYY-MM-DD sin desplazarlas por zona horaria.
  * @param {string|Date|null|undefined} fecha Fecha recibida de la API.
  * @returns {string} Fecha local legible o N/A.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 const formatearFecha = (fecha) => {
   if (!fecha) return "N/A";
@@ -64,11 +65,14 @@ const formatearFecha = (fecha) => {
  * @param {object} props Manejadores globales de errores.
  * @param {Function} props.onErrorNotificacion Notifica errores al usuario.
  * @param {Function} props.onErrorOcultarModulo Oculta el módulo ante errores críticos.
+ * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
  * @returns {JSX.Element} Interfaz de administración de ventas.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function Ventas({
   onErrorNotificacion,
   onErrorOcultarModulo,
+  onVolverCentroGestion,
 }) {
   const [ventas, setVentas] = useState([]);
   const [opciones, setOpciones] = useState({
@@ -77,7 +81,7 @@ export default function Ventas({
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
   const [pagina, setPagina] = useState(0);
   const [filasPorPagina, setFilasPorPagina] = useState(5);
-  const [hayMas, setHayMas] = useState(false);
+  const [hayMasFilas, setHayMasFilas] = useState(false);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [detalleAbierto, setDetalleAbierto] = useState(false);
   const [clienteRelacionado, setClienteRelacionado] = useState(null);
@@ -89,7 +93,10 @@ export default function Ventas({
   /**
    * Solicita las ventas según filtros y actualiza la tabla.
    * @param {object} criterios Valores de filtro para la consulta.
+   * @param {number} [paginaSolicitada=0] Índice base cero de la página.
+   * @param {number} [filasSolicitadas=filasPorPagina] Cantidad de filas.
    * @returns {Promise<void>} Actualiza los resultados y la paginación.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const fetchVentas = async (
     criterios = FILTROS_INICIALES,
@@ -104,9 +111,8 @@ export default function Ventas({
           filasPorPagina: filasSolicitadas,
         })}`,
       );
-      const pagina = normalizarRespuestaPaginada(resultado);
-      setVentas(pagina.datos);
-      setHayMas(pagina.hayMas);
+      setVentas(resultado.datos);
+      setHayMasFilas(resultado.hayMasFilas);
       setPagina(paginaSolicitada);
     } catch (error) {
       mostrarError(
@@ -120,6 +126,11 @@ export default function Ventas({
 
   useEffect(() => {
     let activo = true;
+    /**
+     * Cargar Datos.
+     * @returns {Promise<void>} Carga la primera página de ventas.
+     * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+     */
     const cargarDatos = async () => {
       const [resultadoVentas, resultadoOpciones] = await Promise.allSettled([
         solicitarJson("/api/ventas"),
@@ -128,9 +139,8 @@ export default function Ventas({
       if (!activo) return;
 
       if (resultadoVentas.status === "fulfilled") {
-        const pagina = normalizarRespuestaPaginada(resultadoVentas.value);
-        setVentas(pagina.datos);
-        setHayMas(pagina.hayMas);
+        setVentas(resultadoVentas.value.datos);
+        setHayMasFilas(resultadoVentas.value.hayMasFilas);
       } else {
         mostrarError(
           resultadoVentas.reason,
@@ -160,6 +170,7 @@ export default function Ventas({
   /**
    * Limpia todos los filtros y vuelve a cargar la lista completa.
    * @returns {void} Restablece los valores y consulta la primera página.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const restaurarFiltros = () => {
     setFiltros(FILTROS_INICIALES);
@@ -170,6 +181,7 @@ export default function Ventas({
    * Carga el encabezado y las líneas para mostrar el detalle de una venta.
    * @param {number} invoiceId Identificador de la factura.
    * @returns {Promise<void>} Abre el detalle o notifica el error.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirDetalle = async (invoiceId) => {
     try {
@@ -189,6 +201,7 @@ export default function Ventas({
    * Abre el detalle del cliente relacionado con la venta.
    * @param {number} customerId Identificador del cliente.
    * @returns {Promise<void>} Carga y muestra el detalle del cliente.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirClienteRelacionado = async (customerId) => {
     try {
@@ -209,6 +222,7 @@ export default function Ventas({
    * Abre el detalle del producto relacionado con una línea.
    * @param {number} stockItemId Identificador del producto.
    * @returns {Promise<void>} Carga y muestra el detalle del producto.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirProductoRelacionado = async (stockItemId) => {
     try {
@@ -228,6 +242,7 @@ export default function Ventas({
   /**
    * Abre el formulario para crear una factura.
    * @returns {void} Reinicia el formulario y muestra el modal.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirVentaNueva = () => {
     setVentaEnEdicion(null);
@@ -239,6 +254,7 @@ export default function Ventas({
    * Carga el detalle completo antes de abrir una venta para edición.
    * @param {number} invoiceId Identificador de la factura.
    * @returns {Promise<void>} Abre el formulario de edición.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirEdicion = async (invoiceId) => {
     try {
@@ -260,6 +276,7 @@ export default function Ventas({
    * para que un guardado parcial pueda reintentarse sin duplicarlas.
    * @param {object} borrador Encabezado, ID existente opcional y líneas.
    * @returns {Promise<object>} Resultado y filas de línea con IDs actualizados.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const guardarVenta = async (borrador) => {
     let invoiceId = borrador.invoiceId;
@@ -343,7 +360,7 @@ export default function Ventas({
         </TableCell>
         <TableCell>{venta.Cliente || "N/A"}</TableCell>
         <TableCell>{venta.MetodoEntrega || "N/A"}</TableCell>
-        <TableCell align="right">
+        <TableCell align="left" sx={{ color: "#047857", fontWeight: 700 }}>
           {`$${Number(venta.Monto || 0).toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -397,8 +414,10 @@ export default function Ventas({
       titulo="Gestión de Ventas"
       descripcion="Consulta facturas y administra sus encabezados y líneas"
       Icono={PointOfSaleIcon}
-      IconoBoton={AddIcon}
-      textoBoton="Nueva venta"
+      onVolver={onVolverCentroGestion}
+      textoBotonVolver="Volver al centro de gestión"
+      IconoBotonCrear={AddIcon}
+      textoBotonCrear="Nueva venta"
       onCrear={abrirVentaNueva}
     >
       {/* Filtros para consultar facturas por cliente, fecha, entrega y monto. */}
@@ -597,7 +616,7 @@ export default function Ventas({
           <ControlesPaginacionTabla
             pagina={pagina}
             filasPorPagina={filasPorPagina}
-            hayMas={hayMas}
+            hayMasFilas={hayMasFilas}
             onCambiarPagina={(_, numeroPagina) => fetchVentas(filtros, numeroPagina)}
             onCambiarFilasPorPagina={(nuevoTamano) => {
               setFilasPorPagina(nuevoTamano);
@@ -633,6 +652,9 @@ export default function Ventas({
         onClose={() => setFormularioAbierto(false)}
         venta={ventaEnEdicion}
         onGuardar={guardarVenta}
+        IconoCrear={ReceiptLongIcon}
+        IconoEditar={EditIcon}
+        IconoModulo={PointOfSaleIcon}
       />
     </ModuloInterfazBase>
   );

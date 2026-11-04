@@ -112,7 +112,7 @@ const agregarPaginacion = (request, query = {}) => {
  * Recorta la fila extra y la usa para indicar si existe otra página.
  * @param {Array<object[]>} resultados Conjuntos devueltos por el procedimiento.
  * @param {object} query Parámetros de paginación usados en la consulta.
- * @returns {{datos: object[], hayMas: boolean}} Página y estado de continuación.
+ * @returns {{datos: object[], hayMasFilas: boolean}} Página y estado de continuación.
  */
 const crearRespuestaPaginada = (resultados = [], query = {}) => {
   const { filasPorPagina } = leerParametrosPaginacion(query);
@@ -120,7 +120,7 @@ const crearRespuestaPaginada = (resultados = [], query = {}) => {
 
   return {
     datos: filas.slice(0, filasPorPagina),
-    hayMas: filas.length > filasPorPagina,
+    hayMasFilas: filas.length > filasPorPagina,
   };
 };
 
@@ -128,7 +128,7 @@ const crearRespuestaPaginada = (resultados = [], query = {}) => {
  * Ejecuta un procedimiento de opciones con búsqueda por texto, ID y paginación.
  * @param {string} procedimiento Nombre fijo del procedimiento almacenado.
  * @param {object} query Parámetros de búsqueda y paginación recibidos por HTTP.
- * @returns {Promise<{datos: object[], hayMas: boolean}>} Página normalizada.
+ * @returns {Promise<{datos: object[], hayMasFilas: boolean}>} Página normalizada.
  */
 const consultarOpcionesPaginadas = async (procedimiento, query = {}) => {
   const { pagina, filasPorPagina } = leerParametrosPaginacion(query);

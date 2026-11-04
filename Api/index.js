@@ -78,7 +78,7 @@ app.use(cors());
 app.use(express.json());
 const port = Number(process.env.PORT) || 3000;
 
-// Opciones de catálogos consultadas mediante procedimientos específicos.
+// Opciones de catálogos.
 app.get("/api/opciones/clientes", getOpcionesClientes);
 app.get("/api/opciones/clientesFacturacion", getOpcionesClientes);
 app.get("/api/opciones/contactos", getOpcionesContactos);

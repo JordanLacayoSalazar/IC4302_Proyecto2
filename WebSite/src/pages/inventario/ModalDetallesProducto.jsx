@@ -12,6 +12,12 @@ import WarehouseIcon from "@mui/icons-material/Warehouse";
 import CampoDetalle from "../../components/CampoDetalle";
 import ModalInterfazBase from "../../components/ModalInterfazBase";
 
+/**
+ * Muestra la información descriptiva, comercial y de inventario del producto.
+ * @param {object} props Estado del modal y producto seleccionado.
+ * @returns {JSX.Element} Modal con los detalles del producto.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 export default function ModalDetallesProducto({ abierto, onClose, producto }) {
   if (!producto) return null;
 

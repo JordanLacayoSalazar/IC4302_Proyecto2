@@ -1,5 +1,10 @@
 import { Box, Tabs, Tab } from "@mui/material";
 
+/** Renderiza el panel asociado al índice de pestaña seleccionado.
+ * @param {object} props Contenido, índice activo e identificadores accesibles.
+ * @returns {JSX.Element} Panel de contenido.
+ * @throws {Error} Si el contenido hijo genera un error al renderizarse.
+ */
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
   return (
@@ -16,6 +21,11 @@ function TabPanel(props) {
   );
 }
 
+/** Genera los atributos ARIA relacionados de una pestaña.
+ * @param {number} index Índice de la pestaña.
+ * @returns {{id: string, 'aria-controls': string}} Identificadores accesibles.
+ * @throws {RangeError} Si el índice no puede convertirse en identificador.
+ */
 function a11yProps(index) {
   return {
     id: `pestana-tab-${index}`,
@@ -23,6 +33,11 @@ function a11yProps(index) {
   };
 }
 
+/** Muestra pestañas y sus paneles de contenido.
+ * @param {object} props Lista de pestañas, índice activo y manejador de cambio.
+ * @returns {JSX.Element} Navegación y paneles de pestañas.
+ * @throws {Error} Si una pestaña o su contenido falla durante el renderizado.
+ */
 export default function PestanasInterfazBase({
   pestanas,
   tabActual,

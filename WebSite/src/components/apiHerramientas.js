@@ -1,10 +1,13 @@
 import { API_URL } from "./ModuloHerramientas";
 
 /**
- * Construye una query string omitiendo valores vacíos o nulos.
+ * Añade filtros a una URL, por ejemplo `{ nombre: "Ana", pagina: 2 }`
+ * se convierte en `?nombre=Ana&pagina=2`. Omite valores vacíos o nulos.
  *
- * @param {Record<string, unknown>} parametros
- * @returns {string}
+ * @param {Record<string, string|number|boolean|null|undefined>} parametros
+ *   Objeto con nombres de parámetros y sus valores.
+ * @returns {string} Texto para añadir a la URL, o una cadena vacía si no hay valores.
+ * @throws {TypeError} Si un valor no se puede convertir a texto.
  */
 export const construirQuery = (parametros = {}) => {
   const query = new URLSearchParams();
@@ -27,6 +30,7 @@ export const construirQuery = (parametros = {}) => {
  * @param {string} ruta
  * @param {RequestInit} opciones
  * @returns {Promise<any>}
+ * @throws {Error} Si falla la red o la respuesta HTTP indica un error.
  */
 export const solicitarJson = async (ruta, opciones = {}) => {
   const url = ruta.startsWith("http") ? ruta : `${API_URL}${ruta}`;
@@ -47,22 +51,6 @@ export const solicitarJson = async (ruta, opciones = {}) => {
 };
 
 /**
- * Normaliza una lista paginada, aceptando también una respuesta antigua en arreglo.
- * @param {unknown} respuesta Respuesta recibida de un endpoint de listado.
- * @returns {{datos: object[], hayMas: boolean}} Filas de la página y disponibilidad de la siguiente.
- */
-export const normalizarRespuestaPaginada = (respuesta) => {
-  if (Array.isArray(respuesta)) {
-    return { datos: respuesta, hayMas: false };
-  }
-
-  return {
-    datos: Array.isArray(respuesta?.datos) ? respuesta.datos : [],
-    hayMas: respuesta?.hayMas === true,
-  };
-};
-
-/**
  * Determina si un valor representa
  * un entero no negativo.
  *
@@ -70,6 +58,7 @@ export const normalizarRespuestaPaginada = (respuesta) => {
  *
  * @param {string|number} valor
  * @returns {boolean}
+ * @throws {TypeError} Si el valor no se puede convertir a texto.
  */
 export const esEnteroNoNegativo = (valor) => /^\d*$/.test(String(valor));
 
@@ -79,6 +68,7 @@ export const esEnteroNoNegativo = (valor) => /^\d*$/.test(String(valor));
  *
  * @param {string|number} valor
  * @returns {boolean}
+ * @throws {TypeError} Si el valor no se puede convertir a texto.
  */
 export const esDecimalNoNegativo = (valor) =>
   /^\d*(?:[.,]\d*)?$/.test(String(valor));

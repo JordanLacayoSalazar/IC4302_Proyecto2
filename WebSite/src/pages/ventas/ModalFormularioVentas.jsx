@@ -10,7 +10,6 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from '@mui/icons-material/Delete';
-import PointOfSaleIcon from "@mui/icons-material/PointOfSale";
 import ModalInterfazBase from "../../components/ModalInterfazBase";
 import AutocompletePaginado from "../../components/AutocompletePaginado";
 
@@ -23,6 +22,11 @@ const LINEA_VACIA = {
   ImpuestoAplicado: "",
 };
 
+/**
+ * Obtiene la fecha local actual en formato YYYY-MM-DD.
+ * @returns {string} Fecha actual para inicializar el formulario.
+ * @throws {RangeError} Si la fecha actual no se puede convertir a formato ISO.
+ */
 const fechaHoy = () => {
   const hoy = new Date();
   const zonaHoraria = hoy.getTimezoneOffset() * 60000;
@@ -33,6 +37,7 @@ const fechaHoy = () => {
  * Construye los valores editables del encabezado desde un detalle de factura.
  * @param {object|null} venta Detalle de venta cargado o null para una nueva.
  * @returns {object} Valores iniciales del formulario de encabezado.
+ * @throws {TypeError} Si la factura no contiene valores compatibles.
  */
 const crearEncabezadoInicial = (venta) => ({
   CustomerID: venta?.CustomerID ?? "",
@@ -53,6 +58,7 @@ const crearEncabezadoInicial = (venta) => ({
  * Construye líneas editables a partir del detalle de una factura.
  * @param {object|null} venta Detalle de venta cargado o null para una nueva.
  * @returns {Array<object>} Líneas existentes o una línea vacía para empezar.
+ * @throws {TypeError} Si las líneas recibidas no pueden convertirse a formato editable.
  */
 const crearLineasIniciales = (venta) =>
   venta?.Lineas?.length
@@ -74,12 +80,16 @@ const crearLineasIniciales = (venta) =>
  * @param {object|null} props.venta Detalle de la factura para editar.
  * @param {Function} props.onGuardar Guarda encabezado y líneas de la venta.
  * @returns {JSX.Element} Formulario de ventas.
+ * @throws {Error} Si ocurre un error al renderizar el formulario o sus hijos.
  */
 export default function ModalFormularioVentas({
   abierto,
   onClose,
   venta,
   onGuardar,
+  IconoCrear,
+  IconoEditar,
+  IconoModulo,
 }) {
   const [invoiceId, setInvoiceId] = useState(() => venta?.NumeroFactura || null);
   const [encabezado, setEncabezado] = useState(() =>
@@ -93,6 +103,7 @@ export default function ModalFormularioVentas({
    * Actualiza un campo del encabezado de la factura.
    * @param {import('react').ChangeEvent<HTMLInputElement>} evento Cambio del campo.
    * @returns {void} Actualiza el estado del encabezado.
+   * @throws {Error} Si falla el manejador de cambio del formulario.
    */
   const manejarCambioEncabezado = (evento) => {
     const { name, value } = evento.target;
@@ -120,6 +131,7 @@ export default function ModalFormularioVentas({
    * @param {string|number} valor Nuevo valor.
    * @param {object|null} productoElegido Producto seleccionado, si se cambió el producto.
    * @returns {void} Actualiza la línea y sus valores comerciales.
+   * @throws {Error} Si falla una actualización de estado del formulario.
    */
   const manejarCambioLinea = (indice, campo, valor, productoElegido = null) => {
     setLineas((anteriores) =>
@@ -147,6 +159,7 @@ export default function ModalFormularioVentas({
    * Valida y envía encabezado y líneas al módulo padre.
    * Conserva IDs devueltos si una línea falla para permitir reintentar.
    * @returns {Promise<void>} Guarda los datos o muestra los errores de validación.
+   * @throws {Error} Si falla la persistencia de la factura o alguna de sus líneas.
    */
   const guardarFormulario = async () => {
     const camposObligatorios = [
@@ -221,7 +234,7 @@ export default function ModalFormularioVentas({
       onClose={guardando ? () => {} : onClose}
       titulo={titulo}
       descripcion="Complete la factura y sus productos"
-      Icono={PointOfSaleIcon}
+      Icono={IconoModulo}
       maxWidth="lg"
       contenidoSx={{ p: { xs: 2, md: 3 } }}
       acciones={
@@ -238,7 +251,7 @@ export default function ModalFormularioVentas({
             onClick={guardarFormulario}
             disabled={guardando}
             variant="contained"
-            startIcon={<PointOfSaleIcon />}
+            startIcon={invoiceId ? <IconoEditar /> : <IconoCrear />}
             sx={{ textTransform: "none", boxShadow: "none" }}
           >
             {guardando ? "Guardando..." : "Guardar venta"}

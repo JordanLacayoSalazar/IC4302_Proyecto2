@@ -1,5 +1,10 @@
 import { Box, Typography } from "@mui/material";
 
+/** Muestra una etiqueta y su valor junto a un icono descriptivo.
+ * @param {object} props Icono, etiqueta y valor del dato.
+ * @returns {JSX.Element} Fila visual de detalle.
+ * @throws {Error} Si el icono o el valor no puede renderizarse.
+ */
 export default function CampoDetalle({ icono, etiqueta, valor }) {
   return (
     // Fila de detalle con ícono, etiqueta y valor asociado.

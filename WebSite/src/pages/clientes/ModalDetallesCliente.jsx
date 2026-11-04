@@ -16,6 +16,7 @@ import ModalInterfazBase from "../../components/ModalInterfazBase";
  * Normaliza una dirección web y rechaza protocolos que no sean HTTP(S).
  * @param {string|null|undefined} sitioWeb Dirección ingresada o almacenada.
  * @returns {string|null} URL válida o null si no se puede crear un enlace seguro.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 const obtenerEnlaceSitioWeb = (sitioWeb) => {
   if (!sitioWeb) {
@@ -47,6 +48,7 @@ const obtenerEnlaceSitioWeb = (sitioWeb) => {
  * @param {Function} props.onClose Cierra el modal.
  * @param {object|null} props.cliente Datos devueltos por el detalle de cliente.
  * @returns {JSX.Element|null} Modal de detalle o null si no hay cliente.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function ModalDetallesCliente({ abierto, onClose, cliente }) {
   if (!cliente) {

@@ -10,6 +10,11 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 
+/** Presenta el contenedor modal estándar con encabezado, contenido y acciones.
+ * @param {object} props Estado, textos, icono, contenido y manejadores del modal.
+ * @returns {JSX.Element} Ventana modal.
+ * @throws {Error} Si el contenido o las acciones fallan al renderizarse.
+ */
 export default function ModalInterfazBase({
   abierto,
   onClose,

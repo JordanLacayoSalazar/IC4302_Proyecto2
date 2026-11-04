@@ -25,7 +25,6 @@ import SearchIcon from "@mui/icons-material/Search";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import BarChartIcon from "@mui/icons-material/BarChart";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import InventoryIcon from "@mui/icons-material/Inventory";
@@ -36,15 +35,15 @@ import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import HandshakeIcon from "@mui/icons-material/Handshake";
 import SendIcon from "@mui/icons-material/Send";
 
-import ControlesPaginacionTabla from "../../components/ControlesPaginacionTabla";
-import AutocompletePaginado from "../../components/AutocompletePaginado";
-import ModuloInterfazBase from "../../components/ModuloInterfazBase";
-import { mostrarError } from "../../components/ModuloHerramientas";
+import ControlesPaginacionTabla from "../components/ControlesPaginacionTabla";
+import AutocompletePaginado from "../components/AutocompletePaginado";
+import ModuloInterfazBase from "../components/ModuloInterfazBase";
+import { mostrarError } from "../components/ModuloHerramientas";
 import {
   construirQuery,
   esEnteroNoNegativo,
   solicitarJson,
-} from "../../components/apiHerramientas";
+} from "../components/apiHerramientas";
 
 const FILTROS_INICIALES = {
   proveedor: "",
@@ -350,22 +349,32 @@ const CONFIG_REPORTES = [
   },
 ];
 
+/**
+ * Convierte el nombre de una columna al formato legible del encabezado.
+ * @param {string} nombre Nombre recibido desde los resultados.
+ * @returns {string} Encabezado con espacios y mayúscula inicial.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 const formatearEncabezado = (nombre) =>
   nombre
     .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/^./, (letra) => letra.toUpperCase());
 
+/**
+ * Presenta un valor según su tipo y el nombre de su columna.
+ * @param {string} columna Nombre de la columna del reporte.
+ * @param {string|number|boolean|Date|null|undefined} valor Valor recibido desde la API.
+ * @returns {JSX.Element|string} Valor formateado para la tabla.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 const formatearValor = (columna, valor) => {
   if (valor === null || valor === undefined || valor === "") {
     return (
       // Marcador visual para valores ausentes en los resultados.
       <Typography
         variant="body2"
-        sx={{
-          color: "#94a3b8",
-          fontStyle: "italic",
-        }}
+        className="valor-ausente-reporte"
       >
         N/A
       </Typography>
@@ -380,19 +389,23 @@ const formatearValor = (columna, valor) => {
 
   const esMoneda =
     typeof valor === "number" &&
-    ["monto", "precio", "ganancia", "ventas", "facturado", "total"].some(
-      (termino) => nombreColumna.includes(termino),
-    );
+    [
+      "monto",
+      "precio",
+      "ganancia",
+      "ventas",
+      "facturado",
+      "total",
+      "comprapromedio",
+      "ventapromedio",
+    ].some((termino) => nombreColumna.includes(termino));
 
   if (esMoneda) {
     return (
       // Valor monetario del resultado con formato de moneda.
       <Typography
         variant="body2"
-        sx={{
-          fontWeight: 700,
-          color: "#047857",
-        }}
+        className="valor-monetario-reporte"
       >
         $
         {Number(valor).toLocaleString(undefined, {
@@ -410,11 +423,17 @@ const formatearValor = (columna, valor) => {
   return String(valor);
 };
 
+/**
+ * Renderiza resultados tabulares y controles de paginación del reporte.
+ * @param {object} props Filas, página, estado de continuación y manejadores.
+ * @returns {JSX.Element} Tabla o estado vacío del reporte.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 function TablaReporteDinamica({
   datos,
   numPaginaActual,
   cantidadFilasPorPagina,
-  hayMas,
+  hayMasFilas,
   onCambiarPagina,
   onCambiarFilasPorPagina,
 }) {
@@ -423,40 +442,15 @@ function TablaReporteDinamica({
       // Estado vacío cuando el reporte no devuelve filas.
       <Paper
         elevation={0}
-        sx={{
-          py: 8,
-          mt: 2,
-          textAlign: "center",
-          backgroundColor: "#f8fafc",
-          borderRadius: 3,
-          border: "1px dashed #cbd5e1",
-        }}
+        className="estado-vacio-reporte"
       >
-        <BarChartIcon
-          sx={{
-            fontSize: 64,
-            color: "#cbd5e1",
-            mb: 2,
-          }}
-        />
+        <BarChartIcon className="icono-estado-vacio-reporte" />
 
-        <Typography
-          variant="h6"
-          sx={{
-            color: "#475569",
-            fontWeight: 700,
-          }}
-        >
+        <Typography variant="h6" className="titulo-estado-vacio-reporte">
           No se encontraron datos
         </Typography>
 
-        <Typography
-          variant="body2"
-          sx={{
-            color: "#94a3b8",
-            mt: 0.5,
-          }}
-        >
+        <Typography variant="body2" className="descripcion-estado-vacio-reporte">
           Ajusta los filtros o genera nuevamente el reporte.
         </Typography>
       </Paper>
@@ -472,37 +466,15 @@ function TablaReporteDinamica({
       <TableContainer
         component={Paper}
         elevation={0}
-        sx={{
-          border: "1px solid #e2e8f0",
-          borderRadius: 3,
-          overflow: "auto",
-          mt: 3,
-        }}
+        className="contenedor-tabla-reporte"
       >
-        <Table
-          size="medium"
-          sx={{
-            minWidth: 760,
-          }}
-        >
+        <Table size="medium" className="tabla-reporte">
           <TableHead>
-            <TableRow
-              sx={{
-                backgroundColor: "#f1f5f9",
-              }}
-            >
+            <TableRow className="encabezado-tabla-reporte">
               {columnas.map((columna) => (
                 <TableCell
                   key={columna}
-                  sx={{
-                    fontWeight: 700,
-                    color: "#334155",
-                    py: 1.8,
-                    whiteSpace: "nowrap",
-                    textTransform: "uppercase",
-                    fontSize: "0.75rem",
-                    letterSpacing: "0.45px",
-                  }}
+                  className="celda-encabezado-reporte"
                 >
                   {formatearEncabezado(columna)}
                 </TableCell>
@@ -515,22 +487,12 @@ function TablaReporteDinamica({
               <TableRow
                 key={`${numPaginaActual}-${indice}`}
                 hover
-                sx={{
-                  "&:last-child td": {
-                    borderBottom: 0,
-                  },
-                  "&:nth-of-type(even)": {
-                    backgroundColor: "#fafafa",
-                  },
-                }}
+                className="fila-tabla-reporte"
               >
                 {columnas.map((columna) => (
                   <TableCell
                     key={columna}
-                    sx={{
-                      color: "#1e293b",
-                      py: 1.7,
-                    }}
+                    className="celda-tabla-reporte"
                   >
                     {formatearValor(columna, fila[columna])}
                   </TableCell>
@@ -542,11 +504,11 @@ function TablaReporteDinamica({
       </TableContainer>
 
       {/* Paginación de las filas del reporte. */}
-      <Box sx={{ mt: 2 }}>
+      <Box className="paginacion-reporte">
         <ControlesPaginacionTabla
           pagina={numPaginaActual}
           filasPorPagina={cantidadFilasPorPagina}
-          hayMas={hayMas}
+          hayMasFilas={hayMasFilas}
           onCambiarPagina={onCambiarPagina}
           onCambiarFilasPorPagina={onCambiarFilasPorPagina}
         />
@@ -555,6 +517,12 @@ function TablaReporteDinamica({
   );
 }
 
+/**
+ * Renderiza un filtro de reporte con búsqueda y opciones configurables.
+ * @param {object} props Etiqueta, opciones, valor y manejadores del filtro.
+ * @returns {JSX.Element} Campo de filtro.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 function FiltroAutocomplete({
   label,
   value,
@@ -635,23 +603,27 @@ function FiltroAutocomplete({
               inputMode: numeric ? "numeric" : "text",
             },
           }}
-          sx={{
-            backgroundColor: "white",
-          }}
+          className="campo-filtro-reporte"
         />
       )}
     />
   );
 }
 
-export default function Reportes({
+/**
+ * Presenta el centro de reportes, filtros y resultados paginados.
+ * @param {object} props Manejadores de notificaciones y control del módulo.
+ * @returns {JSX.Element} Interfaz del centro de reportes.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
+export default function CentroReportes({
   onErrorNotificacion,
   onErrorOcultarModulo,
 }) {
   const [reporteSeleccionadoId, setReporteSeleccionadoId] = useState(null);
 
   const [datosReporte, setDatosReporte] = useState([]);
-  const [hayMas, setHayMas] = useState(false);
+  const [hayMasFilas, setHayMasFilas] = useState(false);
 
   const [filtros, setFiltros] = useState({
     ...FILTROS_INICIALES,
@@ -676,6 +648,11 @@ export default function Reportes({
   );
 
   useEffect(() => {
+    /**
+     * Carga los años y catálogos requeridos por los filtros de reporte.
+     * @returns {Promise<void>} Carga los catálogos para los filtros.
+     * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+     */
     const cargarCatalogos = async () => {
       try {
         const [aniosData, opcionesReportes] = await Promise.all([
@@ -716,6 +693,12 @@ export default function Reportes({
     cargarCatalogos();
   }, [onErrorNotificacion, onErrorOcultarModulo]);
 
+  /**
+   * Selecciona un reporte y reinicia filtros, filas y paginación.
+   * @param {number} id Número del reporte seleccionado.
+   * @returns {void} Actualiza el estado del reporte activo.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const seleccionarReporte = (id) => {
     setReporteSeleccionadoId(id);
 
@@ -724,11 +707,16 @@ export default function Reportes({
     });
 
     setDatosReporte([]);
-    setHayMas(false);
+    setHayMasFilas(false);
 
     setNumPaginaActual(0);
   };
 
+  /**
+   * Regresa al listado del centro de reportes.
+   * @returns {void} Limpia la selección actual del reporte.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const regresarAReportes = () => {
     setReporteSeleccionadoId(null);
 
@@ -737,11 +725,18 @@ export default function Reportes({
     });
 
     setDatosReporte([]);
-    setHayMas(false);
+    setHayMasFilas(false);
 
     setNumPaginaActual(0);
   };
 
+  /**
+   * Actualiza el valor de un filtro del reporte.
+   * @param {string} campo Clave del filtro que cambia.
+   * @param {string|number} valor Nuevo valor seleccionado o escrito.
+   * @returns {void} Actualiza el estado de filtros.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const actualizarFiltro = (campo, valor) => {
     setFiltros((prev) => ({
       ...prev,
@@ -755,6 +750,7 @@ export default function Reportes({
    * @param {number} paginaSolicitada Número base cero de la página.
    * @param {number} filasSolicitadas Cantidad de filas que se solicitarán.
    * @returns {Promise<void>} Actualiza los resultados del reporte.
+   * @throws {Error} Los errores de validación o solicitud se muestran en la interfaz.
    */
   const cargarReporte = async (
     paginaSolicitada = 0,
@@ -832,7 +828,7 @@ export default function Reportes({
       );
 
       setDatosReporte(Array.isArray(data.datos) ? data.datos : []);
-      setHayMas(data.hayMas);
+      setHayMasFilas(data.hayMasFilas);
       setNumPaginaActual(paginaSolicitada);
     } catch (error) {
       mostrarError(
@@ -846,17 +842,28 @@ export default function Reportes({
     }
   };
 
+  /**
+   * Restablece los filtros y limpia los resultados del reporte.
+   * @returns {void} Reinicia los valores del formulario y la paginación.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const restaurarFiltros = () => {
     setFiltros({
       ...FILTROS_INICIALES,
     });
 
     setDatosReporte([]);
-    setHayMas(false);
+    setHayMasFilas(false);
 
     setNumPaginaActual(0);
   };
 
+  /**
+   * Devuelve el catálogo asociado al filtro indicado.
+   * @param {string} source Nombre del catálogo configurado.
+   * @returns {object[]} Opciones disponibles para el filtro.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const obtenerOpciones = (source) => {
     const fuentes = {
       anios,
@@ -868,6 +875,12 @@ export default function Reportes({
     return fuentes[source] || [];
   };
 
+  /**
+   * Renderiza el control apropiado para un filtro configurado.
+   * @param {object} input Configuración del campo de filtro.
+   * @returns {JSX.Element} Control de filtro.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const renderFiltro = (input) => {
     if (input.catalogo) {
       const valor = filtros[input.campo];
@@ -879,7 +892,7 @@ export default function Reportes({
           valor={valor}
           modoTexto={input.tipo !== "opciones"}
           size="small"
-          sx={{ backgroundColor: "white" }}
+          className="campo-filtro-reporte"
           onChange={(nuevoValor) =>
             actualizarFiltro(
               input.campo,
@@ -909,66 +922,31 @@ export default function Reportes({
   };
 
   return (
+    // Presentación y descripción del centro de reportes.
     <ModuloInterfazBase
       titulo="Reportes y datos estadísticos"
       descripcion="Consulta los indicadores directamente calculados por SQL Server"
       Icono={QueryStatsOutlinedIcon}
+      onVolver={reporteActual ? regresarAReportes : undefined}
+      textoBotonVolver="Volver al centro de reportes"
       ocultarBotonNuevo
     >
-      <Box
-        sx={{
-          fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-          p: {
-            xs: 2.5,
-            md: 3,
-          },
-        }}
-      >
+      <Box className="contenedor-centro-reportes">
         {!reporteActual ? (
           <>
-            {/* Presentación y descripción del centro de reportes. */}
-            <Paper
-              elevation={0}
-              sx={{
-                p: {
-                  xs: 2.5,
-                  md: 3,
-                },
-                mb: 3,
-                borderRadius: 3,
-                border: "1px solid #e2e8f0",
-                background: "linear-gradient(135deg, #edf2ef 0%, #ffffff 65%)",
-              }}
-            >
-              <Stack
-                direction="row"
-                spacing={1.5}
-                sx={{
-                  alignItems: "center",
-                  mb: 1,
-                }}
-              >
+            {/* Tarjeta introductoria del centro de reportes. */}
+            <Paper elevation={0} className="tarjeta-presentacion-reportes">
+              <Stack direction="row" spacing={1.5} sx={{alignItems: "center", mb: 1}}>
                 <Box className="icono-centro-reportes">
-                  <AssessmentIcon />
+                  <AssessmentIcon aria-hidden="true" />
                 </Box>
 
                 <Box>
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      fontWeight: 700,
-                      color: "#0f172a",
-                    }}
-                  >
+                  <Typography variant="h6" className="titulo-presentacion-reportes">
                     Centro de reportes
                   </Typography>
 
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "#64748b",
-                    }}
-                  >
+                  <Typography variant="body2" className="descripcion-presentacion-reportes">
                     Selecciona el análisis que deseas ejecutar y después aplica
                     sus filtros.
                   </Typography>
@@ -976,18 +954,8 @@ export default function Reportes({
               </Stack>
             </Paper>
 
-            {/* Tarjetas disponibles para abrir cada reporte. */}
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  sm: "1fr 1fr",
-                  lg: "repeat(3, 1fr)",
-                },
-                gap: 2,
-              }}
-            >
+            {/* Botones para abrir cada reporte. */}
+            <Box className="cuadricula-tarjetas-reporte">
               {CONFIG_REPORTES.map((reporte) => {
                 const Icono = reporte.Icono;
 
@@ -995,100 +963,39 @@ export default function Reportes({
                   <Card
                     key={reporte.num}
                     elevation={0}
-                    sx={{
-                      borderRadius: 3,
-                      border: "1px solid #e2e8f0",
-                      transition: "all 0.2s ease",
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        borderColor: "#284272",
-                        boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
-                      },
-                    }}
+                    className="tarjeta-reporte"
                   >
                     <CardActionArea
                       onClick={() => seleccionarReporte(reporte.num)}
-                      sx={{
-                        height: "100%",
-                        p: 2.3,
-                        textAlign: "left",
-                      }}
+                      className="area-tarjeta-reporte"
                     >
-                      <Stack
-                        direction="row"
-                        spacing={1.5}
-                        sx={{
-                          alignItems: "flex-start",
-                        }}
-                      >
+                      <Stack className="fila-contenido-tarjeta-reporte">
                         <Box className="icono-tarjeta-reporte">
-                          <Icono />
+                          <Icono aria-hidden="true" />
                         </Box>
 
                         <Box>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: "#284272",
-                              fontWeight: 700,
-                            }}
-                          >
+                          <Typography variant="caption" className="numero-tarjeta-reporte">
                             REPORTE {reporte.num}
                           </Typography>
 
-                          <Typography
-                            variant="subtitle1"
-                            sx={{
-                              mt: 0.35,
-                              fontWeight: 700,
-                              color: "#0f172a",
-                            }}
-                          >
+                          <Typography variant="subtitle1" className="titulo-tarjeta-reporte">
                             {reporte.label}
                           </Typography>
 
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: "#64748b",
-                              mt: 0.5,
-                              lineHeight: 1.55,
-                            }}
-                          >
+                          <Typography variant="body2" className="descripcion-tarjeta-reporte">
                             {reporte.desc}
                           </Typography>
                         </Box>
                       </Stack>
 
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                          alignItems: "center",
-                          mt: 2,
-                          justifyContent: "space-between",
-                        }}
-                      >
+                      <Stack direction="row" className="pie-tarjeta-reporte">
                         <Chip
                           size="small"
                           label={reporte.etiqueta}
-                          sx={{
-                            backgroundColor: "#f8fafc",
-                            color: "#475569",
-                            fontWeight: 700,
-                          }}
+                          className="etiqueta-tarjeta-reporte"
                         />
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{
-                            alignItems: "center",
-                            color: "#284272",
-                            fontSize: 13,
-                            fontWeight: 700,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <Stack direction="row" className="accion-tarjeta-reporte">
                           Ver reporte
                           <OpenInNewIcon className="icono-abrir" />
                         </Stack>
@@ -1103,89 +1010,30 @@ export default function Reportes({
           // Vista del reporte seleccionado, sus filtros y sus resultados.
           <Paper
             elevation={0}
-            sx={{
-              borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              overflow: "hidden",
-            }}
+            className="panel-detalle-reporte"
           >
-            <Box
-              sx={{
-                p: {
-                  xs: 2.5,
-                  md: 3,
-                },
-                backgroundColor: "#f8fafc",
-              }}
-            >
+            <Box className="encabezado-detalle-reporte">
               {/* Navegación de regreso y título del reporte activo. */}
-              <Stack
-                direction="row"
-                spacing={1.5}
-                sx={{
-                  alignItems: "center",
-                  mb: 2,
-                }}
-              >
-                <Button
-                  className="boton-volver-reportes"
-                  startIcon={<ArrowBackIcon />}
-                  onClick={regresarAReportes}
-                >
-                  Reportes
-                </Button>
-
+              <Stack direction="row" spacing={1.5} className="boton-volver-numero-reporte">
                 <Chip
                   label={`Reporte ${reporteActual.num}`}
                   size="small"
-                  sx={{
-                    fontWeight: 700,
-                  }}
+                  className="numero-detalle-reporte"
                 />
               </Stack>
 
-              <Stack
-                direction="row"
-                spacing={1.5}
-                sx={{
-                  alignItems: "flex-start",
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 2,
-                    flexShrink: 0,
-                    display: "grid",
-                    placeItems: "center",
-                    backgroundColor: "#284272",
-                    color: "#ffffff",
-                  }}
-                >
-                  <reporteActual.Icono />
+              <Stack direction="row" spacing={1.5} className="titulo-detalle-reporte">
+                <Box className="icono-detalle-reporte">
+                  <reporteActual.Icono aria-hidden="true" />
                 </Box>
 
                 <Box>
-                  <Typography
-                    variant="h5"
-                    sx={{
-                      fontWeight: 700,
-                      color: "#0f172a",
-                    }}
-                  >
+                  <Typography variant="h5" className="nombre-detalle-reporte">
                     {reporteActual.label}
                   </Typography>
 
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "#64748b",
-                      mt: 0.5,
-                    }}
-                  >
-                    {reporteActual.desc} Los filtros se resuelven en el
-                    procedimiento almacenado correspondiente.
+                  <Typography variant="body2" className="descripcion-detalle-reporte">
+                    {reporteActual.desc}
                   </Typography>
                 </Box>
               </Stack>
@@ -1193,74 +1041,27 @@ export default function Reportes({
 
             <Divider />
 
-            <Box
-              sx={{
-                p: {
-                  xs: 2.5,
-                  md: 3,
-                },
-              }}
-            >
+            <Box className="seccion-filtros-reporte">
               {/* Filtros y acciones para generar el reporte. */}
               {reporteActual.inputs.length > 0 ? (
-                <Box
-                  sx={{
-                    p: 2.2,
-                    borderRadius: 3,
-                    backgroundColor: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                  }}
-                >
-                  <Typography
-                    variant="subtitle1"
-                    sx={{
-                      fontWeight: 700,
-                      color: "#1e293b",
-                      mb: 2,
-                    }}
-                  >
+                <Box className="panel-filtros-reporte">
+                  <Typography variant="subtitle1" className="titulo-filtros-reporte">
                     Filtros del reporte
                   </Typography>
 
                   <Box
-                    sx={{
-                      display: "grid",
-                      gridTemplateColumns: {
-                        xs: "1fr",
-                        md: `repeat(${Math.min(
-                          reporteActual.inputs.length,
-                          4,
-                        )}, minmax(0, 1fr))`,
-                      },
-                      gap: 1.5,
-                    }}
+                    className={`cuadricula-filtros-reporte columnas-filtros-${Math.min(reporteActual.inputs.length, 4)}`}
                   >
                     {reporteActual.inputs.map(renderFiltro)}
                   </Box>
 
-                  <Stack
-                    direction={{
-                      xs: "column",
-                      sm: "row",
-                    }}
-                    spacing={1.2}
-                    sx={{
-                      justifyContent: "flex-end",
-                      mt: 2,
-                    }}
-                  >
+                  <Stack className="acciones-filtros-reporte">
                     <Button
                       variant="outlined"
                       startIcon={<RestartAltIcon />}
                       onClick={restaurarFiltros}
                       disabled={generando}
-                      sx={{
-                        textTransform: "none",
-                        borderRadius: 2,
-                        fontWeight: 700,
-                        borderColor: "#284272",
-                        color: "#284272",
-                      }}
+                      className="boton-limpiar-reporte"
                     >
                       Limpiar
                     </Button>
@@ -1270,47 +1071,20 @@ export default function Reportes({
                       startIcon={<SearchIcon />}
                       onClick={() => cargarReporte()}
                       disabled={generando}
-                      sx={{
-                        textTransform: "none",
-                        borderRadius: 2,
-                        fontWeight: 600,
-                        px: 3,
-                        boxShadow: "none",
-                        backgroundColor: "#284272",
-                        "&:hover": {
-                          backgroundColor: "#1d3158",
-                          boxShadow: "none",
-                        },
-                      }}
+                      className="boton-generar-reporte"
                     >
                       {generando ? "Generando…" : "Generar reporte"}
                     </Button>
                   </Stack>
                 </Box>
               ) : (
-                <Stack
-                  direction="row"
-                  spacing={1.2}
-                  sx={{
-                    justifyContent: "flex-end",
-                  }}
-                >
+                <Stack className="acciones-filtros-reporte acciones-sin-filtros-reporte">
                   <Button
                     variant="contained"
                     startIcon={<SearchIcon />}
                     onClick={() => cargarReporte()}
                     disabled={generando}
-                    sx={{
-                      textTransform: "none",
-                      borderRadius: 2,
-                      fontWeight: 600,
-                      boxShadow: "none",
-                      backgroundColor: "#284272",
-                      "&:hover": {
-                        backgroundColor: "#1d3158",
-                        boxShadow: "none",
-                      },
-                    }}
+                    className="boton-generar-reporte"
                   >
                     {generando ? "Generando…" : "Generar reporte"}
                   </Button>
@@ -1320,47 +1094,15 @@ export default function Reportes({
 
             <Divider />
 
-            <Box
-              sx={{
-                p: {
-                  xs: 2.5,
-                  md: 3,
-                },
-              }}
-            >
+            <Box className="seccion-resultados-reporte">
               {/* Cantidad de resultados y tabla de datos devueltos. */}
-              <Stack
-                direction={{
-                  xs: "column",
-                  sm: "row",
-                }}
-                spacing={1}
-                sx={{
-                  alignItems: {
-                    xs: "flex-start",
-                    sm: "center",
-                  },
-                  justifyContent: "space-between",
-                }}
-              >
+              <Stack direction={{xs: "column", sm: "row"}} spacing={1}>
                 <Box>
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      fontWeight: 700,
-                      color: "#0f172a",
-                    }}
-                  >
+                  <Typography variant="h6" className="titulo-resultados-reporte">
                     Resultados
                   </Typography>
 
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "#64748b",
-                      mt: 0.3,
-                    }}
-                  >
+                  <Typography variant="body2" className="descripcion-resultados-reporte">
                     Información devuelta directamente por la base de datos.
                   </Typography>
                 </Box>
@@ -1370,7 +1112,7 @@ export default function Reportes({
                 datos={datosReporte}
                 numPaginaActual={numPaginaActual}
                 cantidadFilasPorPagina={cantidadFilasPorPagina}
-                hayMas={hayMas}
+                hayMasFilas={hayMasFilas}
                 onCambiarPagina={(_, pagina) => cargarReporte(pagina)}
                 onCambiarFilasPorPagina={(nuevoTamano) => {
                   setCantidadFilasPorPagina(nuevoTamano);

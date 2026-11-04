@@ -11,6 +11,12 @@ import AutocompletePaginado from "../../components/AutocompletePaginado";
 import PestanasInterfazBase from "../../components/PestanasInterfazBase";
 import { esEnteroNoNegativo } from "../../components/apiHerramientas";
 
+/**
+ * Renderiza el formulario para crear o modificar un proveedor.
+ * @param {object} props Estado inicial, manejadores y acciones del formulario.
+ * @returns {JSX.Element} Modal con las secciones del proveedor.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 export default function ModalFormularioProveedor({
   abierto,
   onClose,
@@ -27,12 +33,22 @@ export default function ModalFormularioProveedor({
   const [tabActual, setTabActual] = useState(0);
   const [errores, setErrores] = useState({});
 
+  /**
+   * Restablece la pestaña y los errores antes de cerrar el formulario.
+   * @returns {void} Cierra el modal y limpia su estado local.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarCierre = () => {
     setTabActual(0);
     setErrores({});
     onClose();
   };
 
+  /**
+   * Valida los datos y delega el guardado del proveedor.
+   * @returns {void} Muestra errores o envía los datos normalizados.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const validarYGuardar = () => {
     const nuevosErrores = {};
 
@@ -324,7 +340,7 @@ export default function ModalFormularioProveedor({
           ? "Modifica la información del proveedor"
           : "Completa la información para registrar un proveedor"
       }
-      Icono={modoEdicion ? IconoEditar : IconoCrear}
+      Icono={IconoModulo}
       maxWidth="md"
       contenidoSx={{ p: { xs: 2, md: 4 } }}
       acciones={
@@ -339,7 +355,7 @@ export default function ModalFormularioProveedor({
           <Button
             onClick={validarYGuardar}
             variant="contained"
-            startIcon={<IconoModulo />}
+            startIcon={modoEdicion ? <IconoEditar /> : <IconoCrear />}
             sx={{
               textTransform: "none",
               borderRadius: 2,

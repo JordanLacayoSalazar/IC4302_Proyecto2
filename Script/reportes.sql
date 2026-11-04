@@ -59,28 +59,29 @@ BEGIN
             s.SupplierName,
             sc.SupplierCategoryName
     )
-SELECT
-                CASE
-                    WHEN GROUPING(SupplierCategoryName) = 1
-                         AND GROUPING(SupplierName) = 1
-                        THEN 'TOTAL GENERAL'
-                    WHEN GROUPING(SupplierName) = 1
-                        THEN 'TOTAL CATEGORÍA'
-                    ELSE SupplierCategoryName
-                END AS Categoria,
-                CASE
-                    WHEN GROUPING(SupplierCategoryName) = 1
-                         AND GROUPING(SupplierName) = 1
-                        THEN 'TOTAL GENERAL'
-                    WHEN GROUPING(SupplierName) = 1
-                        THEN SupplierCategoryName
-                    ELSE SupplierName
-                END AS Proveedor,
-                CAST(MAX(MontoOrden) AS DECIMAL(18,2)) AS MontoMasAlto,
-                CAST(MIN(MontoOrden) AS DECIMAL(18,2)) AS MontoMasBajo,
-                CAST(AVG(MontoOrden) AS DECIMAL(18,2)) AS CompraPromedio
-        FROM ComprasPorOrden
-            GROUP BY ROLLUP(SupplierCategoryName, SupplierName)
+
+    SELECT
+        CASE
+            WHEN GROUPING(SupplierCategoryName) = 1
+                    AND GROUPING(SupplierName) = 1
+                THEN 'TOTAL GENERAL'
+            WHEN GROUPING(SupplierName) = 1
+                THEN 'TOTAL CATEGORÍA'
+            ELSE SupplierCategoryName
+        END AS Categoria,
+        CASE
+            WHEN GROUPING(SupplierCategoryName) = 1
+                    AND GROUPING(SupplierName) = 1
+                THEN 'TOTAL GENERAL'
+            WHEN GROUPING(SupplierName) = 1
+                THEN SupplierCategoryName
+            ELSE SupplierName
+        END AS Proveedor,
+        CAST(MAX(MontoOrden) AS DECIMAL(18,2)) AS MontoMasAlto,
+        CAST(MIN(MontoOrden) AS DECIMAL(18,2)) AS MontoMasBajo,
+        CAST(AVG(MontoOrden) AS DECIMAL(18,2)) AS CompraPromedio
+    FROM ComprasPorOrden
+    GROUP BY ROLLUP(SupplierCategoryName, SupplierName)
     ORDER BY Categoria ASC, Proveedor ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -116,43 +117,44 @@ BEGIN
         FROM syn_LineasFactura AS il
         GROUP BY il.InvoiceID
     )
-SELECT
-                CASE
-                    WHEN GROUPING(cc.CustomerCategoryName) = 1 AND GROUPING(c.CustomerName) = 1
-                        THEN 'TOTAL GENERAL'
-                    WHEN GROUPING(c.CustomerName) = 1
-                        THEN CONCAT('TOTAL CATEGORÍA: ', cc.CustomerCategoryName)
-                    ELSE cc.CustomerCategoryName
-                END AS Categoria,
+
+    SELECT
+        CASE
+            WHEN GROUPING(cc.CustomerCategoryName) = 1 AND GROUPING(c.CustomerName) = 1
+                THEN 'TOTAL GENERAL'
+            WHEN GROUPING(c.CustomerName) = 1
+                THEN CONCAT('TOTAL CATEGORÍA: ', cc.CustomerCategoryName)
+            ELSE cc.CustomerCategoryName
+        END AS Categoria,
+
+        CASE
+            WHEN GROUPING(cc.CustomerCategoryName) = 1 AND GROUPING(c.CustomerName) = 1
+                OR GROUPING(c.CustomerName) = 1
+                THEN ''
+            ELSE c.CustomerName
+        END AS Cliente,
+
+        CASE WHEN GROUPING(c.CustomerName) = 1 THEN NULL ELSE MAX(c.CustomerID) END AS ClienteID,
+
+        MAX(ISNULL(tf.Monto, 0)) AS MontoMasAlto,
+        MIN(ISNULL(tf.Monto, 0)) AS MontoMasBajo,
+        AVG(CAST(ISNULL(tf.Monto, 0) AS DECIMAL(18, 2))) AS VentaPromedio
+    FROM syn_Facturas AS i
         
-                CASE
-                    WHEN GROUPING(cc.CustomerCategoryName) = 1 AND GROUPING(c.CustomerName) = 1
-                        OR GROUPING(c.CustomerName) = 1
-                        THEN ''
-                    ELSE c.CustomerName
-                END AS Cliente,
-        
-                CASE WHEN GROUPING(c.CustomerName) = 1 THEN NULL ELSE MAX(c.CustomerID) END AS ClienteID,
-        
-                MAX(ISNULL(tf.Monto, 0)) AS MontoMasAlto,
-                MIN(ISNULL(tf.Monto, 0)) AS MontoMasBajo,
-                AVG(CAST(ISNULL(tf.Monto, 0) AS DECIMAL(18, 2))) AS VentaPromedio
-        FROM syn_Facturas AS i
-        
-            INNER JOIN syn_Clientes AS c
-                ON i.CustomerID = c.CustomerID
-        
-            INNER JOIN syn_CategoriasCliente AS cc
-                ON c.CustomerCategoryID = cc.CustomerCategoryID
-        
-            LEFT JOIN TotalesFactura AS tf
-                ON i.InvoiceID = tf.InvoiceID
-        
-            WHERE
-                (@NombreCliente IS NULL OR c.CustomerName LIKE '%' + LTRIM(RTRIM(@NombreCliente)) + '%')
-                AND (@Categoria IS NULL OR cc.CustomerCategoryName LIKE '%' + LTRIM(RTRIM(@Categoria)) + '%')
-        
-            GROUP BY ROLLUP (cc.CustomerCategoryName, c.CustomerName)
+    INNER JOIN syn_Clientes AS c
+        ON i.CustomerID = c.CustomerID
+
+    INNER JOIN syn_CategoriasCliente AS cc
+        ON c.CustomerCategoryID = cc.CustomerCategoryID
+
+    LEFT JOIN TotalesFactura AS tf
+        ON i.InvoiceID = tf.InvoiceID
+
+    WHERE
+        (@NombreCliente IS NULL OR c.CustomerName LIKE '%' + LTRIM(RTRIM(@NombreCliente)) + '%')
+        AND (@Categoria IS NULL OR cc.CustomerCategoryName LIKE '%' + LTRIM(RTRIM(@Categoria)) + '%')
+
+    GROUP BY ROLLUP (cc.CustomerCategoryName, c.CustomerName)
     ORDER BY Categoria ASC, Cliente ASC, ClienteID ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -200,13 +202,14 @@ BEGIN
             YEAR(i.InvoiceDate),
             si.StockItemName
     )
-SELECT
-                Anio,
-                Ranking,
-                Producto,
-                CAST(GananciaTotal AS DECIMAL(18,2)) AS GananciaTotal
-        FROM Ganancias
-            WHERE Ranking <= 5
+
+    SELECT
+        Anio,
+        Ranking,
+        Producto,
+        CAST(GananciaTotal AS DECIMAL(18,2)) AS GananciaTotal
+    FROM Ganancias
+    WHERE Ranking <= 5
     ORDER BY Anio DESC, Ranking ASC, Producto ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -318,15 +321,16 @@ BEGIN
             ) AS Posicion
         FROM VentasClienteAnio
     )
-SELECT
-                Anio,
-                Posicion,
-                CustomerID,
-                Cliente,
-                CantidadFacturas,
-                MontoTotalFacturado
-        FROM ClientesRanking
-            WHERE Posicion <= 5
+
+    SELECT
+        Anio,
+        Posicion,
+        CustomerID,
+        Cliente,
+        CantidadFacturas,
+        MontoTotalFacturado
+    FROM ClientesRanking
+    WHERE Posicion <= 5
     ORDER BY Anio DESC, Posicion ASC, Cliente ASC, CustomerID ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -446,16 +450,17 @@ BEGIN
             ) AS Posicion
         FROM ComprasProveedorAnio
     )
-SELECT
-                Anio,
-                Posicion,
-                SupplierID,
-                Proveedor,
-                Categoria,
-                CantidadOrdenes,
-                MontoTotal
-        FROM ProveedoresRanking
-            WHERE Posicion <= 5
+
+    SELECT
+        Anio,
+        Posicion,
+        SupplierID,
+        Proveedor,
+        Categoria,
+        CantidadOrdenes,
+        MontoTotal
+    FROM ProveedoresRanking
+    WHERE Posicion <= 5
     ORDER BY Anio DESC, Posicion ASC, Proveedor ASC, SupplierID ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -571,54 +576,54 @@ BEGIN
         INNER JOIN syn_GruposProducto AS sg
             ON sisg.StockGroupID = sg.StockGroupID
     )
-SELECT
-                c.CustomerID,
-                c.CustomerName AS Cliente,
-                DATEPART(YEAR, i.InvoiceDate) AS Anio,
-                DATEPART(MONTH, i.InvoiceDate) AS Mes,
-                MIN(i.InvoiceDate) AS PrimeraFacturaDelMes,
-                MAX(i.InvoiceDate) AS UltimaFacturaDelMes,
-                SUM(ISNULL(il.ExtendedPrice, 0) + ISNULL(il.TaxAmount, 0)) AS MontoTotalComprado,
-                SUM(il.Quantity) AS CantidadTotal,
-                MIN(il.Quantity) AS CantidadMinima,
-                MAX(il.Quantity) AS CantidadMaxima
-        FROM syn_Facturas AS i
+    SELECT
+        c.CustomerID,
+        c.CustomerName AS Cliente,
+        DATEPART(YEAR, i.InvoiceDate) AS Anio,
+        DATEPART(MONTH, i.InvoiceDate) AS Mes,
+        MIN(i.InvoiceDate) AS PrimeraFacturaDelMes,
+        MAX(i.InvoiceDate) AS UltimaFacturaDelMes,
+        SUM(ISNULL(il.ExtendedPrice, 0) + ISNULL(il.TaxAmount, 0)) AS MontoTotalComprado,
+        SUM(il.Quantity) AS CantidadTotal,
+        MIN(il.Quantity) AS CantidadMinima,
+        MAX(il.Quantity) AS CantidadMaxima
+    FROM syn_Facturas AS i
         
-            INNER JOIN syn_Clientes AS c
-                ON i.CustomerID = c.CustomerID
-        
-            INNER JOIN syn_LineasFactura AS il
-                ON i.InvoiceID = il.InvoiceID
-        
-            INNER JOIN syn_Productos AS si
-                ON il.StockItemID = si.StockItemID
-        
-            WHERE
-                -- Año y mes
-                (@Anio IS NULL OR DATEPART(YEAR, i.InvoiceDate) = @Anio)
-                AND (@Mes IS NULL OR DATEPART(MONTH, i.InvoiceDate) = @Mes)
-        
-                --Categoría de producto
-                AND (
-                    @CategoriaProducto IS NULL
-                    OR si.StockItemID IN ( -- Se filtra por productos que pertenecen a la categoría especificada
-                        SELECT StockItemID
-                        FROM ProductosPorCategoria
-                        WHERE StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%'
-                    )
-                )
-        
-                -- Subcategoría de producto
-                AND (
-                    @SubcategoriaProducto IS NULL
-                    OR si.StockItemName LIKE '%' + LTRIM(RTRIM(@SubcategoriaProducto)) + '%'
-                )
-        
-            GROUP BY
-                c.CustomerID,
-                c.CustomerName,
-                DATEPART(YEAR, i.InvoiceDate),
-                DATEPART(MONTH, i.InvoiceDate)
+    INNER JOIN syn_Clientes AS c
+        ON i.CustomerID = c.CustomerID
+
+    INNER JOIN syn_LineasFactura AS il
+        ON i.InvoiceID = il.InvoiceID
+
+    INNER JOIN syn_Productos AS si
+        ON il.StockItemID = si.StockItemID
+
+    WHERE
+        -- Año y mes
+        (@Anio IS NULL OR DATEPART(YEAR, i.InvoiceDate) = @Anio)
+        AND (@Mes IS NULL OR DATEPART(MONTH, i.InvoiceDate) = @Mes)
+
+        --Categoría de producto
+        AND (
+            @CategoriaProducto IS NULL
+            OR si.StockItemID IN ( -- Se filtra por productos que pertenecen a la categoría especificada
+                SELECT StockItemID
+                FROM ProductosPorCategoria
+                WHERE StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%'
+            )
+        )
+
+        -- Subcategoría de producto
+        AND (
+            @SubcategoriaProducto IS NULL
+            OR si.StockItemName LIKE '%' + LTRIM(RTRIM(@SubcategoriaProducto)) + '%'
+        )
+
+    GROUP BY
+        c.CustomerID,
+        c.CustomerName,
+        DATEPART(YEAR, i.InvoiceDate),
+        DATEPART(MONTH, i.InvoiceDate)
     ORDER BY Cliente ASC, Anio DESC, Mes DESC, CustomerID ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -648,44 +653,45 @@ BEGIN
 
     IF @Mes IS NOT NULL AND (@Mes < 1 OR @Mes > 12)
         THROW 50203, 'El mes debe estar entre 1 y 12.', 1;
-SELECT
-                s.SupplierName AS Proveedor,
-                YEAR(po.OrderDate) AS Anio,
-                MONTH(po.OrderDate) AS Mes,
-                CAST(SUM(pol.OrderedOuters * pol.ExpectedUnitPricePerOuter) AS DECIMAL(18,2)) AS MontoTotal,
-                MIN(po.OrderDate) AS PrimeraFacturaMes,
-                MAX(po.OrderDate) AS UltimaFacturaMes,
-                SUM(pol.OrderedOuters) AS CantidadTotal,
-                MIN(pol.OrderedOuters) AS CantidadMinima,
-                MAX(pol.OrderedOuters) AS CantidadMaxima
-        FROM syn_OrdenesCompra AS po
-            INNER JOIN syn_LineasOrdenCompra AS pol
-                ON po.PurchaseOrderID = pol.PurchaseOrderID
-            INNER JOIN syn_Proveedores AS s
-                ON po.SupplierID = s.SupplierID
-            INNER JOIN syn_Productos AS si
-                ON pol.StockItemID = si.StockItemID
-            INNER JOIN syn_ProductoGrupos AS pig
-                ON si.StockItemID = pig.StockItemID
-            INNER JOIN syn_GruposProducto AS sg
-                ON pig.StockGroupID = sg.StockGroupID
-            WHERE
-                (@Anio IS NULL OR YEAR(po.OrderDate) = @Anio)
-                AND (@Mes IS NULL OR MONTH(po.OrderDate) = @Mes)
-                AND
-                (
-                    NULLIF(LTRIM(RTRIM(@CategoriaProducto)), '') IS NULL
-                    OR sg.StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%'
-                )
-                AND
-                (
-                    NULLIF(LTRIM(RTRIM(@SubcategoriaProducto)), '') IS NULL
-                    OR si.StockItemName LIKE '%' + LTRIM(RTRIM(@SubcategoriaProducto)) + '%'
-                )
-            GROUP BY
-                s.SupplierName,
-                YEAR(po.OrderDate),
-                MONTH(po.OrderDate)
+
+    SELECT
+        s.SupplierName AS Proveedor,
+        YEAR(po.OrderDate) AS Anio,
+        MONTH(po.OrderDate) AS Mes,
+        CAST(SUM(pol.OrderedOuters * pol.ExpectedUnitPricePerOuter) AS DECIMAL(18,2)) AS MontoTotal,
+        MIN(po.OrderDate) AS PrimeraFacturaMes,
+        MAX(po.OrderDate) AS UltimaFacturaMes,
+        SUM(pol.OrderedOuters) AS CantidadTotal,
+        MIN(pol.OrderedOuters) AS CantidadMinima,
+        MAX(pol.OrderedOuters) AS CantidadMaxima
+    FROM syn_OrdenesCompra AS po
+    INNER JOIN syn_LineasOrdenCompra AS pol
+        ON po.PurchaseOrderID = pol.PurchaseOrderID
+    INNER JOIN syn_Proveedores AS s
+        ON po.SupplierID = s.SupplierID
+    INNER JOIN syn_Productos AS si
+        ON pol.StockItemID = si.StockItemID
+    INNER JOIN syn_ProductoGrupos AS pig
+        ON si.StockItemID = pig.StockItemID
+    INNER JOIN syn_GruposProducto AS sg
+        ON pig.StockGroupID = sg.StockGroupID
+    WHERE
+        (@Anio IS NULL OR YEAR(po.OrderDate) = @Anio)
+        AND (@Mes IS NULL OR MONTH(po.OrderDate) = @Mes)
+        AND
+        (
+            NULLIF(LTRIM(RTRIM(@CategoriaProducto)), '') IS NULL
+            OR sg.StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%'
+        )
+        AND
+        (
+            NULLIF(LTRIM(RTRIM(@SubcategoriaProducto)), '') IS NULL
+            OR si.StockItemName LIKE '%' + LTRIM(RTRIM(@SubcategoriaProducto)) + '%'
+        )
+    GROUP BY
+        s.SupplierName,
+        YEAR(po.OrderDate),
+        MONTH(po.OrderDate)
     ORDER BY Anio DESC, Mes DESC, MontoTotal DESC, Proveedor ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;
@@ -847,12 +853,13 @@ BEGIN
             ) AS Posicion
         FROM VentasPorDestinoYMetodo
     )
-SELECT
-                LugarDestino,
-                MetodoEnvio,
-                CantidadVentas
-        FROM MetodosEntregaRanking
-            WHERE Posicion = 1
+
+    SELECT
+        LugarDestino,
+        MetodoEnvio,
+        CantidadVentas
+    FROM MetodosEntregaRanking
+    WHERE Posicion = 1
     ORDER BY CantidadVentas DESC, LugarDestino ASC, MetodoEnvio ASC
     OFFSET (@Pagina * @FilasPorPagina) ROWS
     FETCH NEXT @FilasConIndicador ROWS ONLY;

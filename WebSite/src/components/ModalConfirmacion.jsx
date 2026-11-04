@@ -8,6 +8,11 @@ import {
 } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
+/** Presenta un diálogo que solicita confirmar o cancelar una acción.
+ * @param {object} props Estado, textos, colores y manejadores del diálogo.
+ * @returns {JSX.Element} Diálogo de confirmación.
+ * @throws {Error} Si ocurre un error al renderizar el mensaje o sus acciones.
+ */
 export default function ModalConfirmacion({
   abierto,
   onClose,

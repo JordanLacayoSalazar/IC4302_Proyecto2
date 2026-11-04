@@ -45,11 +45,11 @@ const leerIdRequerido = (valor, nombre) => {
 };
 
 /**
- * Valida una fecha ISO opcional de formato YYYY-MM-DD.
+ * Valida una fecha opcional de formato YYYY-MM-DD.
  * @param {*} valor Fecha recibida.
  * @param {string} nombre Nombre del campo.
  * @returns {string|null} Fecha validada o null si está vacía.
- * @throws {Error} Cuando la fecha no es una fecha ISO válida.
+ * @throws {Error} Cuando la fecha no es una fecha válida.
  */
 const leerFechaOpcional = (valor, nombre) => {
   if (valor === undefined || valor === null || String(valor).trim() === "") {
@@ -75,7 +75,7 @@ const leerFechaOpcional = (valor, nombre) => {
  * Valida una fecha obligatoria de factura.
  * @param {*} valor Fecha recibida.
  * @param {string} nombre Nombre del campo.
- * @returns {string} Fecha ISO validada.
+ * @returns {string} Fecha validada.
  * @throws {Error} Cuando el campo está vacío o no tiene formato válido.
  */
 const leerFechaRequerida = (valor, nombre) => {
@@ -432,29 +432,10 @@ const actualizarLineaVenta = async (req, res) => {
     const invoiceId = leerIdRequerido(req.params.id, "InvoiceID");
     const invoiceLineId = leerIdRequerido(req.params.lineId, "InvoiceLineID");
     const pool = await conectarBaseDatos();
-    const lineaExistente = await pool
-      .request()
-      .input("InvoiceLineID", sql.Int, invoiceLineId)
-      .query(
-        "SELECT InvoiceID FROM syn_LineasFactura WHERE InvoiceLineID = @InvoiceLineID",
-      );
-
-    if (!lineaExistente.recordset.length) {
-      return res.status(404).json({ errorMsg: "Línea de venta no encontrada." });
-    }
-    if (lineaExistente.recordset[0].InvoiceID !== invoiceId) {
-      const error = new Error("La línea no pertenece a la factura indicada.");
-      error.statusCode = 400;
-      throw error;
-    }
-
     const resultado = await pool
       .request()
-      .input(
-        "InvoiceLineID",
-        sql.Int,
-        invoiceLineId,
-      )
+      .input("InvoiceLineID", sql.Int, invoiceLineId)
+      .input("InvoiceIDEsperado", sql.Int, invoiceId)
       .input("StockItemID", sql.Int, leerIdRequerido(StockItemID, "StockItemID"))
       .input(
         "PackageTypeID",
@@ -468,6 +449,12 @@ const actualizarLineaVenta = async (req, res) => {
 
     res.json(resultado.recordset[0]);
   } catch (error) {
+    if (error.number === 50014) {
+      return res.status(404).json({ errorMsg: "Línea de venta no encontrada." });
+    }
+    if (error.number === 50039) {
+      error.statusCode = 400;
+    }
     manejarError(res, error);
   }
 };

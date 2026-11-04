@@ -12,13 +12,14 @@ import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 
 /**
  * Muestra los controles de página de una tabla cuyos datos se consultan al servidor.
- * @param {{pagina: number, filasPorPagina: number, hayMas: boolean, onCambiarPagina: Function, onCambiarFilasPorPagina: Function}} props Estado y manejadores de la paginación.
+ * @param {{pagina: number, filasPorPagina: number, hayMasFilas: boolean, onCambiarPagina: Function, onCambiarFilasPorPagina: Function}} props Estado y manejadores de la paginación.
  * @returns {JSX.Element} Controles de paginación.
+ * @throws {Error} Si ocurre un error al renderizar los controles.
  */
 export default function ControlesPaginacionTabla({
   pagina,
   filasPorPagina,
-  hayMas,
+  hayMasFilas,
   onCambiarPagina,
   onCambiarFilasPorPagina,
 }) {
@@ -27,12 +28,12 @@ export default function ControlesPaginacionTabla({
       <Box className="controles-paginacion-tabla-contenido">
         <FormControl
           size="small"
-          className="controles-paginacion-tabla-selector"
         >
           <InputLabel id="filas-por-pagina-etiqueta">
             Filas por página
           </InputLabel>
           <Select
+            className="controles-paginacion-tabla-selector"
             labelId="filas-por-pagina-etiqueta"
             value={filasPorPagina}
             label="Filas por página"
@@ -59,7 +60,7 @@ export default function ControlesPaginacionTabla({
         <IconButton
           aria-label="Página siguiente"
           onClick={(evento) => onCambiarPagina(evento, pagina + 1)}
-          disabled={!hayMas}
+          disabled={!hayMasFilas}
           size="small"
         >
           <KeyboardArrowRightIcon />

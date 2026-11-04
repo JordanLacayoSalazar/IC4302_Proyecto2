@@ -7,7 +7,6 @@ import {
   InputAdornment,
 } from "@mui/material";
 import InventoryIcon from "@mui/icons-material/Inventory";
-import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import AllInboxIcon from "@mui/icons-material/AllInbox";
 import WarehouseIcon from "@mui/icons-material/Warehouse";
@@ -20,10 +19,19 @@ import {
   esEnteroNoNegativo,
 } from "../../components/apiHerramientas";
 
+/**
+ * Renderiza el formulario para crear o modificar un producto.
+ * @param {object} props Estado, manejadores y acciones del formulario.
+ * @returns {JSX.Element} Modal con las secciones del producto.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 export default function ModalFormularioProducto({
   abierto,
   onClose,
   modoEdicion,
+  IconoCrear,
+  IconoEditar,
+  IconoModulo,
   formData,
   manejarCambioFormulario,
   manejarCambioAutocomplete,
@@ -32,12 +40,22 @@ export default function ModalFormularioProducto({
   const [tabActual, setTabActual] = useState(0);
   const [errores, setErrores] = useState({});
 
+  /**
+   * Restablece la pestaña y los errores antes de cerrar el formulario.
+   * @returns {void} Cierra el modal y limpia su estado local.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarCierre = () => {
     setTabActual(0);
     setErrores({});
     onClose();
   };
 
+  /**
+   * Valida los datos y delega el guardado del producto.
+   * @returns {void} Muestra errores o envía los datos normalizados.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const validarYGuardar = () => {
     const nuevosErrores = {};
 
@@ -389,7 +407,7 @@ export default function ModalFormularioProducto({
           ? "Modifica los datos del producto en inventario"
           : "Agrega un nuevo artículo al catálogo"
       }
-      Icono={LocalOfferIcon}
+      Icono={IconoModulo}
       maxWidth="md"
       contenidoSx={{ p: { xs: 2, md: 4 } }}
       acciones={
@@ -404,6 +422,7 @@ export default function ModalFormularioProducto({
           <Button
             onClick={validarYGuardar}
             variant="contained"
+            startIcon={modoEdicion ? <IconoEditar /> : <IconoCrear />}
             sx={{
               textTransform: "none",
               borderRadius: 2,

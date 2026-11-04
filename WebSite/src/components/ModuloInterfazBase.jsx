@@ -1,13 +1,23 @@
 import { Box, Button, Paper, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
+/** Construye la vista base de un módulo con encabezado, acción y contenido.
+ * @param {object} props Título, descripción, iconos, acciones e hijos.
+ * @param {Function} [props.onVolver] Acción opcional de regreso dentro del panel.
+ * @param {string} [props.textoBotonVolver] Texto personalizado para el botón de regreso.
+ * @returns {JSX.Element} Estructura visual del módulo.
+ * @throws {Error} Si los hijos o el componente de icono fallan al renderizarse.
+ */
 export default function ModuloInterfazBase({
   titulo,
   descripcion,
   Icono,
-  textoBoton,
+  onVolver,
+  textoBotonVolver,
+  textoBotonCrear,
   onCrear,
-  IconoBoton = AddIcon,
+  IconoBotonCrear = AddIcon,
   children,
 }) {
   return (
@@ -85,29 +95,67 @@ export default function ModuloInterfazBase({
                 </Typography>
               </Box>
             </Stack>
-            {/* Botón para crear un registro nuevo. */}
-            {textoBoton && onCrear && (
-              <Button
-                variant="contained"
-                startIcon={<IconoBoton />}
-                onClick={onCrear}
-                sx={{
-                  backgroundColor: "#22c55e",
-                  color: "white",
-                  fontWeight: 700,
-                  px: 2.5,
-                  py: 1.2,
-                  borderRadius: 2.5,
-                  textTransform: "none",
-                  boxShadow: "none",
-                  "&:hover": { backgroundColor: "#16a34a", boxShadow: "none" },
-                }}
-              >
-                {textoBoton}
-              </Button>
-            )}
+
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: "center",
+                flexWrap: "wrap",
+                flexShrink: 0,
+                "& .MuiButton-root": {
+                  height: 48,
+                  marginBottom: 0,
+                  boxSizing: "border-box",
+                },
+              }}
+            >
+              {/* Botón de regreso al centro de gestión, si se proporciona la acción. */}
+              {onVolver && (
+                <Button
+                  className="boton-volver"
+                  onClick={onVolver}
+                  variant="outlined"
+                  startIcon={<ArrowBackIcon />}
+                  sx={{
+                    width: "fit-content",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {textoBotonVolver}
+                </Button>
+              )}
+
+              {/* Botón para crear un registro nuevo. */}
+              {textoBotonCrear && onCrear && (
+                <Button
+                  variant="contained"
+                  startIcon={<IconoBotonCrear />}
+                  onClick={onCrear}
+                  sx={{
+                    width: "fit-content",
+                    whiteSpace: "nowrap",
+                    backgroundColor: "#22c55e",
+                    color: "white",
+                    fontWeight: 700,
+                    px: 2.5,
+                    py: 1.2,
+                    borderRadius: 2.5,
+                    textTransform: "none",
+                    boxShadow: "none",
+                    "&:hover": {
+                      backgroundColor: "#16a34a",
+                      boxShadow: "none",
+                    },
+                  }}
+                >
+                  {textoBotonCrear}
+                </Button>
+              )}
+            </Stack>
           </Box>
         </Box>
+
         {/* Contenido específico que proporciona cada módulo. */}
         {children}
       </Paper>

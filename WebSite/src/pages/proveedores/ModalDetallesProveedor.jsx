@@ -15,6 +15,12 @@ import MapaUbicacion from "../../components/MapaUbicacion";
 import CampoDetalle from "../../components/CampoDetalle";
 import ModalInterfazBase from "../../components/ModalInterfazBase";
 
+/**
+ * Muestra los datos de contacto, dirección y cuenta de un proveedor.
+ * @param {object} props Estado del modal y proveedor seleccionado.
+ * @returns {JSX.Element} Modal con los detalles del proveedor.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 export default function ModalDetallesProveedor({
   abierto,
   onClose,

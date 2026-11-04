@@ -17,7 +17,6 @@ import {
 } from "@mui/material";
 
 import SearchIcon from "@mui/icons-material/Search";
-import AddIcon from "@mui/icons-material/Add";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -36,7 +35,6 @@ import { mostrarError } from "../../components/ModuloHerramientas";
 import {
   construirQuery,
   esEnteroNoNegativo,
-  normalizarRespuestaPaginada,
   solicitarJson,
 } from "../../components/apiHerramientas";
 
@@ -65,9 +63,19 @@ const FORMULARIO_INICIAL = {
   Longitud: null,
 };
 
+/**
+ * Presenta el listado, los filtros y los formularios de proveedores.
+ * @param {object} props Propiedades de notificación y control del módulo.
+ * @param {Function} props.onErrorNotificacion Muestra errores recuperables.
+ * @param {Function} props.onErrorOcultarModulo Oculta el módulo ante errores críticos.
+ * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
+ * @returns {JSX.Element} Interfaz de gestión de proveedores.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 export default function Proveedores({
   onErrorNotificacion,
   onErrorOcultarModulo,
+  onVolverCentroGestion,
 }) {
   const [proveedores, setProveedores] = useState([]);
   const [filtroNombre, setFiltroNombre] = useState("");
@@ -87,7 +95,7 @@ export default function Proveedores({
   const [modoEdicion, setModoEdicion] = useState(false);
   const [numPaginaActual, setNumPaginaActual] = useState(0);
   const [cantidadFilasPorPagina, setCantidadFilasPorPagina] = useState(5);
-  const [hayMas, setHayMas] = useState(false);
+  const [hayMasFilas, setHayMasFilas] = useState(false);
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false);
   const [proveedorAEliminar, setProveedorAEliminar] = useState(null);
   const [formData, setFormData] = useState(FORMULARIO_INICIAL);
@@ -95,6 +103,7 @@ export default function Proveedores({
   /**
    * Carga catálogos del módulo desde la API.
    * @returns {Promise<void>} Actualiza los estados de opciones.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const cargarOpciones = async () => {
     try {
@@ -119,7 +128,10 @@ export default function Proveedores({
    * Consulta proveedores usando los filtros.
    * @param {{nombre?: string, categoriaId?: string, metodoEntregaId?: string}} filtros
    *   Filtros a enviar.
+   * @param {number} [pagina=0] Número base cero de página.
+   * @param {number} [filasPorPagina=cantidadFilasPorPagina] Filas solicitadas.
    * @returns {Promise<void>} Actualiza la tabla y reinicia su paginación.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const fetchProveedores = async ({
     nombre = filtroNombre,
@@ -138,9 +150,8 @@ export default function Proveedores({
           filasPorPagina,
         })}`,
       );
-      const resultadoPaginado = normalizarRespuestaPaginada(datos);
-      setProveedores(resultadoPaginado.datos);
-      setHayMas(resultadoPaginado.hayMas);
+      setProveedores(datos.datos);
+      setHayMasFilas(datos.hayMasFilas);
       setNumPaginaActual(pagina);
     } catch (error) {
       mostrarError(
@@ -155,6 +166,11 @@ export default function Proveedores({
   useEffect(() => {
     let activo = true;
 
+    /**
+     * Carga proveedores, categorías y opciones al montar el módulo.
+     * @returns {Promise<void>} Carga los datos iniciales del módulo.
+     * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+     */
     const cargarInicial = async () => {
       const resultados = await Promise.allSettled([
         solicitarJson("/api/proveedores"),
@@ -168,9 +184,8 @@ export default function Proveedores({
         resultados;
 
       if (resultadoProveedores.status === "fulfilled") {
-        const pagina = normalizarRespuestaPaginada(resultadoProveedores.value);
-        setProveedores(pagina.datos);
-        setHayMas(pagina.hayMas);
+        setProveedores(resultadoProveedores.value.datos);
+        setHayMasFilas(resultadoProveedores.value.hayMasFilas);
         setNumPaginaActual(0);
       } else {
         mostrarError(
@@ -225,8 +240,9 @@ export default function Proveedores({
 
 
   /**
-   * Restablece filtros
+   * Restablece los filtros y vuelve a cargar la primera página.
    * @returns {Promise<void>} Tabla completa de proveedores.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const restaurarFiltros = async () => {
     setFiltroNombre("");
@@ -243,6 +259,7 @@ export default function Proveedores({
    * Obtiene el detalle de un proveedor.
    * @param {number} id Identificador del proveedor.
    * @returns {Promise<void>} Abre el modal con los datos recibidos.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const abrirDetalles = async (id) => {
     try {
@@ -262,6 +279,7 @@ export default function Proveedores({
   /**
    * Abre el formulario para crear un proveedor.
    * @returns {void} Reinicia el formulario y muestra el modal.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirFormularioNuevo = () => {
     setModoEdicion(false);
@@ -273,6 +291,7 @@ export default function Proveedores({
    * Carga un proveedor para edición.
    * @param {object} proveedorRow Fila seleccionada.
    * @returns {Promise<void>} Abre el formulario con los datos actuales.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirFormularioEdicion = async (proveedorRow) => {
     try {
@@ -323,20 +342,46 @@ export default function Proveedores({
     }
   };
 
+  /**
+   * Actualiza un campo del formulario del proveedor.
+   * @param {import('react').ChangeEvent<HTMLInputElement>} e Evento de cambio.
+   * @returns {void} Actualiza el estado del formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarCambioFormulario = (e) => {
     const { name, value } = e.target;
     if (name === "PaymentDays" && !esEnteroNoNegativo(value)) return;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  /**
+   * Actualiza el campo elegido en un autocompletado.
+   * @param {string} nombreCampo Nombre de la propiedad del formulario.
+   * @param {string|number|null} valor Opción seleccionada.
+   * @returns {void} Actualiza el estado del formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarCambioAutocomplete = (nombreCampo, valor) => {
     setFormData((prev) => ({ ...prev, [nombreCampo]: valor }));
   };
 
+  /**
+   * Guarda las coordenadas capturadas para el proveedor.
+   * @param {number|null} lat Latitud elegida.
+   * @param {number|null} lng Longitud elegida.
+   * @returns {void} Actualiza las coordenadas del formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarUbicacionCapturada = (lat, lng) => {
     setFormData((prev) => ({ ...prev, Latitud: lat, Longitud: lng }));
   };
 
+  /**
+   * Crea o modifica el proveedor y actualiza la lista.
+   * @param {object} datosFormulario Datos editados del proveedor.
+   * @returns {Promise<void>} Guarda el registro y refresca la interfaz.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
+   */
   const guardarProveedor = async (datosFormulario) => {
     const id = datosFormulario.SupplierID;
     const ruta = id ? `/api/proveedores/${id}` : "/api/proveedores";
@@ -360,6 +405,12 @@ export default function Proveedores({
     }
   };
 
+  /**
+   * Abre la confirmación para eliminar el proveedor indicado.
+   * @param {object} proveedor Proveedor que se desea eliminar.
+   * @returns {void} Guarda el proveedor pendiente y muestra el diálogo.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const confirmarEliminacion = (proveedor) => {
     setProveedorAEliminar(proveedor);
     setModalEliminarAbierto(true);
@@ -368,6 +419,7 @@ export default function Proveedores({
   /**
    * Elimina el proveedor seleccionado.
    * @returns {Promise<void>} Elimina el registro y actualiza la tabla.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
    */
   const ejecutarEliminacion = async () => {
     if (!proveedorAEliminar) return;
@@ -398,8 +450,10 @@ export default function Proveedores({
       titulo="Gestión de Proveedores"
       descripcion="Consulta, administra y controla los proveedores registrados"
       Icono={BusinessIcon}
-      IconoBoton={AddIcon}
-      textoBoton="Nuevo Proveedor"
+      onVolver={onVolverCentroGestion}
+      textoBotonVolver="Volver al centro de gestión"
+      IconoBotonCrear={AddBusinessIcon}
+      textoBotonCrear="Nuevo Proveedor"
       onCrear={abrirFormularioNuevo}
     >
       {/* Filtros para buscar proveedores por nombre, categoría y entrega. */}
@@ -656,7 +710,7 @@ export default function Proveedores({
           <ControlesPaginacionTabla
             pagina={numPaginaActual}
             filasPorPagina={cantidadFilasPorPagina}
-            hayMas={hayMas}
+            hayMasFilas={hayMasFilas}
             onCambiarPagina={(_, nuevaPagina) => fetchProveedores({
               nombre: filtroNombre,
               categoriaId: filtroCategoria,
@@ -689,9 +743,9 @@ export default function Proveedores({
         abierto={modalFormAbierto}
         onClose={() => setModalFormAbierto(false)}
         modoEdicion={modoEdicion}
-        IconoCrear={BusinessIcon}
+        IconoCrear={AddBusinessIcon}
         IconoEditar={EditIcon}
-        IconoModulo={AddBusinessIcon}
+        IconoModulo={BusinessIcon}
         formData={formData}
         manejarCambioFormulario={manejarCambioFormulario}
         manejarCambioAutocomplete={manejarCambioAutocomplete}

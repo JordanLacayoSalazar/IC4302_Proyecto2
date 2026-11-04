@@ -7,6 +7,7 @@ Lista de códigos de errores:
 - 50012: No existe el producto o no tiene un costo de inventario disponible.
 - 50013: No se puede cambiar el cliente o la fecha porque la factura ya tiene movimientos asociados.
 - 50014: No existe la línea de factura indicada.
+- 50039: La línea de factura no pertenece a la factura indicada.
 */
 
 /*
@@ -426,6 +427,7 @@ a Sales.InvoiceLines.
 */
 CREATE OR ALTER PROCEDURE ModificarLineaVenta
     @InvoiceLineID INT,
+    @InvoiceIDEsperado INT,
     @StockItemID INT = NULL,
     @PackageTypeID INT = NULL,
     @Cantidad INT = NULL,
@@ -471,6 +473,11 @@ BEGIN
         IF @InvoiceID IS NULL
         BEGIN
             ;THROW 50014, 'No existe la línea de factura indicada.', 1;
+        END;
+
+        IF @InvoiceID <> @InvoiceIDEsperado
+        BEGIN
+            ;THROW 50039, 'La línea no pertenece a la factura indicada.', 1;
         END;
 
         -- Se determinan los valores finales a utilizar, priorizando los proporcionados por la interfaz

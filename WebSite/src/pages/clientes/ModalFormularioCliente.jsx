@@ -107,11 +107,15 @@ const camposDireccion = [
  * @param {Function} props.manejarUbicacionCapturada Guarda las coordenadas.
  * @param {Function} props.guardarCliente Ejecuta el guardado del cliente.
  * @returns {JSX.Element} Modal con campos y acciones del formulario.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function ModalFormularioCliente({
   abierto,
   onClose,
   modoEdicion,
+  IconoCrear,
+  IconoEditar,
+  IconoModulo,
   formData,
   manejarCambio,
   manejarUbicacionCapturada,
@@ -130,21 +134,22 @@ export default function ModalFormularioCliente({
   }, [abierto, modoEdicion]);
   let titulo;
   let descripcion;
-  let textoBoton;
+  let textoBotonCrear;
 
   if (modoEdicion) {
     titulo = "Editar cliente";
     descripcion = "Actualice la información del cliente";
-    textoBoton = "Guardar cambios";
+    textoBotonCrear = "Guardar cambios";
   } else {
     titulo = "Crear cliente";
     descripcion = "Complete los datos para registrar un cliente";
-    textoBoton = "Crear cliente";
+    textoBotonCrear = "Crear cliente";
   }
 
   /**
    * Valida los campos requeridos antes de delegar el guardado.
    * @returns {void} Guarda el cliente o muestra un error de validación.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const guardarConValidacion = () => {
     const faltaNombre = !String(formData.CustomerName ?? "").trim();
@@ -171,6 +176,7 @@ export default function ModalFormularioCliente({
    * @param {import('react').ChangeEvent<HTMLInputElement | HTMLTextAreaElement>} evento
    *   Evento de cambio del campo.
    * @returns {void} Limpia errores y actualiza el formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const manejarCambioCampo = (evento) => {
     setErrorValidacion("");
@@ -274,7 +280,7 @@ export default function ModalFormularioCliente({
       onClose={onClose}
       titulo={titulo}
       descripcion={descripcion}
-      Icono={GroupsOutlinedIcon}
+      Icono={IconoModulo}
       maxWidth="md"
       contenidoSx={{ p: { xs: 2, md: 4 } }}
       acciones={
@@ -295,7 +301,7 @@ export default function ModalFormularioCliente({
           <Button
             onClick={guardarConValidacion}
             variant="contained"
-            startIcon={<GroupsOutlinedIcon />}
+            startIcon={modoEdicion ? <IconoEditar /> : <IconoCrear />}
             sx={{
               textTransform: "none",
               borderRadius: 2,
@@ -304,7 +310,7 @@ export default function ModalFormularioCliente({
               boxShadow: "none",
             }}
           >
-            {textoBoton}
+            {textoBotonCrear}
           </Button>
         </>
       }

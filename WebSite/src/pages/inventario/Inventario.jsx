@@ -34,7 +34,6 @@ import {
   construirQuery,
   esDecimalNoNegativo,
   esEnteroNoNegativo,
-  normalizarRespuestaPaginada,
   solicitarJson,
 } from "../../components/apiHerramientas";
 
@@ -59,9 +58,17 @@ const FORMULARIO_INICIAL = {
   PalabrasClaves: "",
 };
 
+/**
+ * Presenta la tabla, filtros y formularios de productos e inventario.
+ * @param {object} props Manejadores de errores y control del módulo.
+ * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
+ * @returns {JSX.Element} Interfaz de gestión de inventario.
+ * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+ */
 export default function Inventario({
   onErrorNotificacion,
   onErrorOcultarModulo,
+  onVolverCentroGestion,
 }) {
   const [productos, setProductos] = useState([]);
   const [filtroNombre, setFiltroNombre] = useState("");
@@ -73,11 +80,16 @@ export default function Inventario({
   const [modoEdicion, setModoEdicion] = useState(false);
   const [numPaginaActual, setNumPaginaActual] = useState(0);
   const [cantidadFilasPorPagina, setCantidadFilasPorPagina] = useState(5);
-  const [hayMas, setHayMas] = useState(false);
+  const [hayMasFilas, setHayMasFilas] = useState(false);
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false);
   const [productoAEliminar, setProductoAEliminar] = useState(null);
   const [formData, setFormData] = useState(FORMULARIO_INICIAL);
 
+  /** Consulta productos con filtros y actualiza la tabla paginada.
+   * @param {object} [filtros] Texto, grupo, página y cantidad de filas.
+   * @returns {Promise<void>} Actualiza productos y estado de paginación.
+   * @throws {Error} Los errores de solicitud se capturan y notifican.
+   */
   const fetchProductos = async ({
     nombre = filtroNombre,
     grupoId = filtroGrupo,
@@ -88,9 +100,8 @@ export default function Inventario({
       const data = await solicitarJson(
         `/api/inventario${construirQuery({ nombre, grupoId, pagina, filasPorPagina })}`,
       );
-      const resultadoPaginado = normalizarRespuestaPaginada(data);
-      setProductos(resultadoPaginado.datos);
-      setHayMas(resultadoPaginado.hayMas);
+      setProductos(data.datos);
+      setHayMasFilas(data.hayMasFilas);
       setNumPaginaActual(pagina);
     } catch (error) {
       mostrarError(
@@ -105,6 +116,11 @@ export default function Inventario({
   useEffect(() => {
     let activo = true;
 
+    /**
+     * Carga la primera página de productos y presenta errores de consulta.
+     * @returns {Promise<void>} Carga la primera página de productos.
+     * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+     */
     const cargarInicial = async () => {
       const resultados = await Promise.allSettled([
         solicitarJson("/api/inventario"),
@@ -115,9 +131,8 @@ export default function Inventario({
       const [resultadoProductos] = resultados;
 
       if (resultadoProductos.status === "fulfilled") {
-        const pagina = normalizarRespuestaPaginada(resultadoProductos.value);
-        setProductos(pagina.datos);
-        setHayMas(pagina.hayMas);
+        setProductos(resultadoProductos.value.datos);
+        setHayMasFilas(resultadoProductos.value.hayMasFilas);
         setNumPaginaActual(0);
       } else {
         mostrarError(
@@ -142,6 +157,7 @@ export default function Inventario({
   /**
    * Restaura todos los filtros y consulta todos los productos.
    * @returns {Promise<void>} Restablece los filtros y carga la primera página.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const restaurarFiltros = async () => {
     setFiltroNombre("");
@@ -153,6 +169,7 @@ export default function Inventario({
    * Abre los detalles del producto seleccionado.
    * @param {number|string} id Identificador del producto.
    * @returns {Promise<void>} Carga el detalle y muestra el modal.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirDetalles = async (id) => {
     try {
@@ -172,6 +189,7 @@ export default function Inventario({
   /**
    * Abre el formulario vacío para un nuevo producto.
    * @returns {void} Reinicia el formulario y muestra el modal.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirFormularioNuevo = () => {
     setModoEdicion(false);
@@ -183,6 +201,7 @@ export default function Inventario({
    * Carga los datos del producto seleccionado en el formulario.
    * @param {object} productoRow Fila del producto seleccionado.
    * @returns {Promise<void>} Abre el formulario con los datos actuales.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
    */
   const abrirFormularioEdicion = async (productoRow) => {
     try {
@@ -223,6 +242,12 @@ export default function Inventario({
     }
   };
 
+  /**
+   * Valida el formato y actualiza el campo editado del producto.
+   * @param {import('react').ChangeEvent<HTMLInputElement>} e Evento de cambio.
+   * @returns {void} Actualiza el estado del formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarCambioFormulario = (e) => {
     const { name, value } = e.target;
     const camposEnteros = new Set([
@@ -244,10 +269,23 @@ export default function Inventario({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  /**
+   * Actualiza el campo seleccionado en un autocompletado.
+   * @param {string} nombreCampo Propiedad del formulario.
+   * @param {string|number|null} valor Opción elegida.
+   * @returns {void} Actualiza el estado del formulario.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const manejarCambioAutocomplete = (nombreCampo, valor) => {
     setFormData((prev) => ({ ...prev, [nombreCampo]: valor }));
   };
 
+  /**
+   * Crea o modifica el producto y recarga la tabla.
+   * @param {object} datos Valores del producto.
+   * @returns {Promise<void>} Guarda el registro y refresca la interfaz.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const guardarProducto = async (datos) => {
     const ruta = datos.ProductoID
       ? `/api/inventario/${datos.ProductoID}`
@@ -272,11 +310,22 @@ export default function Inventario({
     }
   };
 
+  /**
+   * Abre el diálogo de confirmación para el producto seleccionado.
+   * @param {object} producto Producto que se desea eliminar.
+   * @returns {void} Guarda el producto pendiente y muestra el diálogo.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const confirmarEliminacion = (producto) => {
     setProductoAEliminar(producto);
     setModalEliminarAbierto(true);
   };
 
+  /**
+   * Elimina el producto confirmado y recarga la tabla.
+   * @returns {Promise<void>} Actualiza la lista después de eliminar.
+   * @throws {Error} Si ocurre un error no controlado durante la ejecución.
+   */
   const ejecutarEliminacion = async () => {
     if (!productoAEliminar) return;
 
@@ -302,8 +351,10 @@ export default function Inventario({
       titulo="Control de Inventarios"
       descripcion="Gestiona y administra los productos, stock y detalles logísticos"
       Icono={InventoryIcon}
-      IconoBoton={AddIcon}
-      textoBoton="Nuevo Producto"
+      onVolver={onVolverCentroGestion}
+      textoBotonVolver="Volver al centro de gestión"
+      IconoBotonCrear={AddIcon}
+      textoBotonCrear="Nuevo Producto"
       onCrear={abrirFormularioNuevo}
     >
       {/* Filtros para buscar productos por nombre y grupo. */}
@@ -541,7 +592,7 @@ export default function Inventario({
           <ControlesPaginacionTabla
             pagina={numPaginaActual}
             filasPorPagina={cantidadFilasPorPagina}
-            hayMas={hayMas}
+            hayMasFilas={hayMasFilas}
             onCambiarPagina={(_, pagina) => fetchProductos({
               nombre: filtroNombre,
               grupoId: filtroGrupo,
@@ -572,6 +623,9 @@ export default function Inventario({
         abierto={modalFormAbierto}
         onClose={() => setModalFormAbierto(false)}
         modoEdicion={modoEdicion}
+        IconoCrear={AddIcon}
+        IconoEditar={EditIcon}
+        IconoModulo={InventoryIcon}
         formData={formData}
         manejarCambioFormulario={manejarCambioFormulario}
         manejarCambioAutocomplete={manejarCambioAutocomplete}

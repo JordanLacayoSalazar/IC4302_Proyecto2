@@ -38,6 +38,11 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Subcomponente para manejar los clics en el mapa y centrar la vista
+/** Atiende clics del mapa y centra el mapa en la posición recibida.
+ * @param {object} props Manejador de ubicación y posición actual.
+ * @returns {JSX.Element|null} Marcador de la posición actual.
+ * @throws {Error} Si el mapa no está dentro de un proveedor de Leaflet.
+ */
 function ManejadorMapa({ setUbicacion, posicionActual }) {
   const map = useMap();
 
@@ -58,6 +63,11 @@ function ManejadorMapa({ setUbicacion, posicionActual }) {
   return posicionActual ? <Marker position={posicionActual} /> : null;
 }
 
+/** Permite buscar una ubicación por dirección, mapa o GPS.
+ * @param {object} props Coordenadas iniciales y callback de ubicación.
+ * @returns {JSX.Element} Formulario y mapa para capturar una ubicación.
+ * @throws {Error} Si el callback de ubicación falla.
+ */
 export default function CapturadorUbicacion({
   onUbicacionCapturada,
   latitudActual,
@@ -74,12 +84,22 @@ export default function CapturadorUbicacion({
     latitudActual && longitudActual ? [latitudActual, longitudActual] : null;
   const posicionInicialMapa = posicion || [9.9281, -84.0905];
 
+  /** Guarda coordenadas seleccionadas y muestra el mapa.
+   * @param {number} lat Latitud capturada.
+   * @param {number} lng Longitud capturada.
+   * @returns {void} Notifica la ubicación y limpia el error.
+   * @throws {Error} Si falla el callback que recibe las coordenadas.
+   */
   const manejarCambioUbicacion = (lat, lng) => {
     onUbicacionCapturada(lat, lng);
     setMostrarMapa(true);
     setError("");
   };
 
+  /** Busca la dirección ingresada mediante Nominatim.
+   * @returns {Promise<void>} Actualiza la ubicación o el mensaje de error.
+   * @throws {Error} Los errores de solicitud se capturan y se muestran.
+   */
   const buscarPorDireccion = async () => {
     if (!direccionAbuscar) return;
     setCargando(true);
@@ -107,6 +127,10 @@ export default function CapturadorUbicacion({
     }
   };
 
+  /** Solicita las coordenadas actuales al navegador.
+   * @returns {void} Actualiza la ubicación o informa un error de geolocalización.
+   * @throws {Error} Los errores del navegador se manejan en sus callbacks.
+   */
   const obtenerUbicacionGPS = () => {
     setCargando(true);
     setError("");
