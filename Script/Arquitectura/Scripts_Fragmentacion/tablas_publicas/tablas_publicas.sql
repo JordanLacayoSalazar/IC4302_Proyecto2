@@ -48,7 +48,7 @@ CREATE TABLE Purchasing.Suppliers_Public (
     SupplierName NVARCHAR(100) NOT NULL,
     SupplierCategoryID INT NOT NULL,
     SupplierReference NVARCHAR(20),
-    DeliveryMethodID INT NOT NULL,
+    DeliveryMethodID INT,
     PaymentDays INT NOT NULL,
     LastEditedBy INT NOT NULL,
     RowVersionData ROWVERSION,
@@ -71,7 +71,7 @@ DROP TABLE IF EXISTS Sales.Invoices;
 DROP TABLE IF EXISTS Warehouse.StockItems;
 GO
 
--- tabala de catalogo de productos
+-- tabla de catalogo de productos
 CREATE TABLE Warehouse.StockItems (
     BranchID INT NOT NULL,
     StockItemID INT NOT NULL, 
@@ -96,7 +96,7 @@ CREATE TABLE Warehouse.StockItems (
     Tags AS (CAST(JSON_QUERY(CustomFields, N'$.Tags') AS NVARCHAR(MAX))),
     SearchDetails AS (CAST(CONCAT(StockItemName, N' ', Barcode, N' ', CustomFields) AS NVARCHAR(MAX))) PERSISTED NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    ValidFrom DATETIME2 (7) NOT NULL,
     CONSTRAINT PK_StockItems PRIMARY KEY (BranchID, StockItemID)
 );
 GO
@@ -557,5 +557,29 @@ CREATE TABLE Warehouse.StockItemStockGroups (
     StockGroupID INT NOT NULL,
     LastEditedBy INT NOT NULL,
     CONSTRAINT PK_StockItemStockGroups PRIMARY KEY (BranchID, StockItemStockGroupID)
+);
+GO
+
+-- si existe la tabla, las elimina (con su contenido) y las vuelve a crear
+DROP TABLE IF EXISTS Application.SystemParameters;
+GO
+
+-- tabla de parametros del sistema
+CREATE TABLE Application.SystemParameters (
+    BranchID INT NOT NULL,
+    SystemParameterID INT NOT NULL,
+    DeliveryAddressLine1 NVARCHAR(60) NOT NULL,
+    DeliveryAddressLine2 NVARCHAR(60),
+    DeliveryCityID INT NOT NULL,
+    DeliveryPostalCode NVARCHAR(10) NOT NULL,
+    DeliveryLocation GEOGRAPHY NOT NULL,
+    PostalAddressLine1 NVARCHAR(60) NOT NULL,
+    PostalAddressLine2 NVARCHAR(60),
+    PostalCityID INT NOT NULL,
+    PostalPostalCode NVARCHAR(10) NOT NULL,
+    ApplicationSettings NVARCHAR(MAX) NOT NULL,
+    LastEditedBy INT NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL,
+    CONSTRAINT PK_SystemParameters PRIMARY KEY (BranchID, SystemParameterID)
 );
 GO
