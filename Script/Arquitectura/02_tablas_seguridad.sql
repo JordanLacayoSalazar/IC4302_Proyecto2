@@ -1,7 +1,9 @@
 -- =========================================================================
--- Este scirpt se debe ejecutar en las 3 bases de datos, lo ideal seria
--- utilizar la extension de VSC o utilizar un 'USE nombreBaseDeDatos', 
--- ademas de tener seleccioando el servidor a utilzar
+-- 02_tablas_seguridad.sql
+-- Ejecutar en las 3 bases (WWI_Corporativo, WWI_SanJose, WWI_Limon).
+-- IMPORTANTE: los usuarios se insertan en UN solo nodo, el sync multi-master
+-- los propaga a los demas. Insertar el mismo Username en dos nodos
+-- genera un conflicto UNIQUE.
 -- =========================================================================
 
 

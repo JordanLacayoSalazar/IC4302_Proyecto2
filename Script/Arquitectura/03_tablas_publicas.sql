@@ -1,7 +1,11 @@
 -- =========================================================================
--- Ejecutar este script en los 3 nodos, en el Corporativo,
--- en la sucursal de limon y en la sucursal de san jose
+-- 03_tablas_publicas.sql
+-- Ejecutar en los 3 nodos (WWI_Corporativo, WWI_SanJose, WWI_Limon),
+-- DESPUES de 02_tablas_seguridad.sql y ANTES de 04 / 06 / 07 / 08.
 -- =========================================================================
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
 
 
 -- =========================================================================
@@ -94,9 +98,10 @@ CREATE TABLE Warehouse.StockItems (
     InternalComments NVARCHAR(MAX),
     CustomFields NVARCHAR(MAX),
     Tags AS (CAST(JSON_QUERY(CustomFields, N'$.Tags') AS NVARCHAR(MAX))),
-    SearchDetails AS (CAST(CONCAT(StockItemName, N' ', Barcode, N' ', CustomFields) AS NVARCHAR(MAX))) PERSISTED NOT NULL,
+    SearchDetails AS (CAST(CONCAT(StockItemName, N' ', MarketingComments) AS NVARCHAR(MAX))) PERSISTED NOT NULL,
     LastEditedBy INT NOT NULL,
-    ValidFrom DATETIME2 (7) NOT NULL,
+    ValidFrom DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
+    RowVersionData ROWVERSION,
     CONSTRAINT PK_StockItems PRIMARY KEY (BranchID, StockItemID)
 );
 GO
@@ -125,10 +130,10 @@ CREATE TABLE Sales.Invoices (
     DeliveryRun NVARCHAR(5),
     RunPosition NVARCHAR(5),
     ReturnedDeliveryData NVARCHAR(MAX),
-    ConfirmedDeliveryTime AS (TRY_CAST(JSON_VALUE(ReturnedDeliveryData, N'$.Events[1].EventTime') AS datetime2(7))),
-    ConfirmedReceivedBy AS (CAST(JSON_VALUE(ReturnedDeliveryData, N'$.Events[1].Conformation.ReceivedBy') AS nvarchar(4000))),
+    ConfirmedDeliveryTime AS (TRY_CONVERT(DATETIME2(7), JSON_VALUE(ReturnedDeliveryData, N'$.DeliveredWhen'), 126)),
+    ConfirmedReceivedBy AS (JSON_VALUE(ReturnedDeliveryData, N'$.ReceivedBy')),
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_Invoices PRIMARY KEY (BranchID, InvoiceID)
 );
 GO
@@ -228,13 +233,13 @@ CREATE TABLE Sales.InvoiceLines (
     Description NVARCHAR(100) NOT NULL,
     PackageTypeID INT NOT NULL,
     Quantity INT NOT NULL,
-    UnitPrice DECIMAL(18,2) NOT NULL,
+    UnitPrice DECIMAL(18,2) NULL,
     TaxRate DECIMAL(18,3) NOT NULL,
     TaxAmount DECIMAL(18,2) NOT NULL,
     LineProfit DECIMAL(18,2) NOT NULL,
     ExtendedPrice DECIMAL(18,2) NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_InvoiceLines PRIMARY KEY (BranchID, InvoiceLineID),
     CONSTRAINT FK_InvoiceLines_Invoices FOREIGN KEY (BranchID, InvoiceID) 
         REFERENCES Sales.Invoices(BranchID, InvoiceID)
@@ -255,7 +260,7 @@ CREATE TABLE Purchasing.PurchaseOrders (
     Comments NVARCHAR(MAX),
     InternalComments NVARCHAR(MAX),
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_PurchaseOrders PRIMARY KEY (BranchID, PurchaseOrderID)
 );
 GO
@@ -270,11 +275,11 @@ CREATE TABLE Purchasing.PurchaseOrderLines (
     Description NVARCHAR(100) NOT NULL,
     ReceivedOuters INT NOT NULL,
     PackageTypeID INT NOT NULL,
-    ExpectedUnitPricePerOuter DECIMAL(18,2) NOT NULL,
+    ExpectedUnitPricePerOuter DECIMAL(18,2) NULL,
     LastReceiptDate DATE,
     IsOrderLineFinalized BIT NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_PurchaseOrderLines PRIMARY KEY (BranchID, PurchaseOrderLineID),
     CONSTRAINT FK_PurchaseOrderLines_Orders FOREIGN KEY (BranchID, PurchaseOrderID) 
         REFERENCES Purchasing.PurchaseOrders(BranchID, PurchaseOrderID)
@@ -313,7 +318,7 @@ CREATE TABLE Sales.Orders (
     InternalComments NVARCHAR(MAX),
     PickingCompletedWhen DATETIME2(7),
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_Orders PRIMARY KEY (BranchID, OrderID)
 );
 GO
@@ -327,12 +332,12 @@ CREATE TABLE Sales.OrderLines (
     Description NVARCHAR(100) NOT NULL,
     PackageTypeID INT NOT NULL,
     Quantity INT NOT NULL,
-    UnitPrice DECIMAL(18,2) NOT NULL,
+    UnitPrice DECIMAL(18,2) NULL,
     TaxRate DECIMAL(18,3) NOT NULL,
     PickedQuantity INT NOT NULL,
     PickingCompletedWhen DATETIME2(7),
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_OrderLines PRIMARY KEY (BranchID, OrderLineID),
     CONSTRAINT FK_OrderLines_Orders FOREIGN KEY (BranchID, OrderID) 
         REFERENCES Sales.Orders(BranchID, OrderID)
@@ -355,7 +360,7 @@ CREATE TABLE Sales.CustomerTransactions (
     FinalizationDate DATE,
     IsFinalized AS (CAST(IIF(FinalizationDate IS NULL, 0, 1) AS BIT)) PERSISTED NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_CustomerTransactions PRIMARY KEY (BranchID, CustomerTransactionID)
 );
 GO
@@ -377,7 +382,7 @@ CREATE TABLE Purchasing.SupplierTransactions (
     FinalizationDate DATE,
     IsFinalized AS (CAST(IIF(FinalizationDate IS NULL, 0, 1) AS BIT)) PERSISTED NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_SupplierTransactions PRIMARY KEY (BranchID, SupplierTransactionID)
 );
 GO
@@ -394,7 +399,7 @@ CREATE TABLE Warehouse.StockItemTransactions (
     TransactionOccurredWhen DATETIME2(7) NOT NULL,
     Quantity DECIMAL(18,3) NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_StockItemTransactions PRIMARY KEY (BranchID, StockItemTransactionID)
 );
 GO
@@ -410,7 +415,7 @@ CREATE TABLE Warehouse.StockItemHoldings (
     ReorderLevel INT NOT NULL,
     TargetStockLevel INT NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL, -- RECUPERADA
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()), -- RECUPERADA
     CONSTRAINT PK_StockItemHoldings PRIMARY KEY (BranchID, StockItemID)
 );
 GO
@@ -556,6 +561,7 @@ CREATE TABLE Warehouse.StockItemStockGroups (
     StockItemID INT NOT NULL,
     StockGroupID INT NOT NULL,
     LastEditedBy INT NOT NULL,
+    RowVersionData ROWVERSION,
     CONSTRAINT PK_StockItemStockGroups PRIMARY KEY (BranchID, StockItemStockGroupID)
 );
 GO
@@ -579,7 +585,7 @@ CREATE TABLE Application.SystemParameters (
     PostalPostalCode NVARCHAR(10) NOT NULL,
     ApplicationSettings NVARCHAR(MAX) NOT NULL,
     LastEditedBy INT NOT NULL,
-    LastEditedWhen DATETIME2(7) NOT NULL,
+    LastEditedWhen DATETIME2(7) NOT NULL DEFAULT (SYSDATETIME()),
     CONSTRAINT PK_SystemParameters PRIMARY KEY (BranchID, SystemParameterID)
 );
 GO

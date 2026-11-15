@@ -1,17 +1,24 @@
-version: "3.8"
+# docker-compose.yml
+# crear un .env con el MSSQL_SA_PASSWORD=tuPassword, antes de ejectar dokcer-compose
+x-sql-common: &sql-common
+  image: mcr.microsoft.com/mssql/server:2025-latest
+  restart: unless-stopped
+  networks:
+    - wwi_network
+
+x-sql-env: &sql-env
+  ACCEPT_EULA: "Y"
+  MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Crea el archivo .env con MSSQL_SA_PASSWORD}
+  MSSQL_PID: Developer
+  MSSQL_AGENT_ENABLED: "true"
 
 services:
-  # --------------------------------------------------------
-  # NODO 1: CORPORATIVO (Escazú) - Puerto Host: 1433
-  # --------------------------------------------------------
+  # NODO 1: CORPORATIVO (Escazu) - puerto host 1433
   corporativo:
-    image: mcr.microsoft.com/mssql/server:2025-latest
+    <<: *sql-common
     container_name: nodo_corporativo
-    environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=TuPassword
-      - MSSQL_PID=Developer
-      - MSSQL_AGENT_ENABLED=True
+    hostname: nodo_corporativo
+    environment: *sql-env
     ports:
       - "1433:1433"
     volumes:
@@ -20,20 +27,13 @@ services:
       - ./data_corp/secrets:/var/opt/mssql/secrets
       - ./data_corp/backup:/var/opt/mssql/backup
       - ./data_corp/repldata:/var/opt/mssql/ReplData
-    networks:
-      - wwi_network
 
-  # --------------------------------------------------------
-  # NODO 2: SUCURSAL SAN JOSÉ - Puerto Host: 1434
-  # --------------------------------------------------------
+  # NODO 2: SUCURSAL SAN JOSE - puerto host 1434
   sucursal_sj:
-    image: mcr.microsoft.com/mssql/server:2025-latest
+    <<: *sql-common
     container_name: nodo_sucursal_sj
-    environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=TuPassword
-      - MSSQL_PID=Developer
-      - MSSQL_AGENT_ENABLED=True
+    hostname: nodo_sucursal_sj
+    environment: *sql-env
     ports:
       - "1434:1433"
     volumes:
@@ -42,20 +42,13 @@ services:
       - ./data_sj/secrets:/var/opt/mssql/secrets
       - ./data_sj/backup:/var/opt/mssql/backup
       - ./data_sj/repldata:/var/opt/mssql/ReplData
-    networks:
-      - wwi_network
 
-  # --------------------------------------------------------
-  # NODO 3: SUCURSAL LIMÓN - Puerto Host: 1435
-  # --------------------------------------------------------
+  # NODO 3: SUCURSAL LIMON - puerto host 1435
   sucursal_limon:
-    image: mcr.microsoft.com/mssql/server:2025-latest
+    <<: *sql-common
     container_name: nodo_sucursal_limon
-    environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=TuPassword
-      - MSSQL_PID=Developer
-      - MSSQL_AGENT_ENABLED=True
+    hostname: nodo_sucursal_limon
+    environment: *sql-env
     ports:
       - "1435:1433"
     volumes:
@@ -64,10 +57,7 @@ services:
       - ./data_limon/secrets:/var/opt/mssql/secrets
       - ./data_limon/backup:/var/opt/mssql/backup
       - ./data_limon/repldata:/var/opt/mssql/ReplData
-    networks:
-      - wwi_network
 
-# Definición de la red virtual para que los nodos se comuniquen entre sí
 networks:
   wwi_network:
     driver: bridge

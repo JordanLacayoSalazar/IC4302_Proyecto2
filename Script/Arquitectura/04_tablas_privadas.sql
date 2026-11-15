@@ -1,7 +1,7 @@
 -- =========================================================================
--- Este script contiene solo las tablas privadas, y se debe ejcutar
--- en el nodo corporativo, se debe ejecutar antes el script,
--- de tablas publicas
+-- 04_tablas_privadas.sql
+-- Solo se ejecuta en el nodo CORPORATIVO (WWI_Corporativo), despues de
+-- 03_tablas_publicas.sql.
 -- =========================================================================
 
 -- validacion de esquemas, si no existen los crea
@@ -29,7 +29,7 @@ CREATE TABLE Sales.Customers_Private (
     DeliveryAddressLine1 NVARCHAR(60) NOT NULL,
     DeliveryAddressLine2 NVARCHAR(60),
     DeliveryPostalCode NVARCHAR(10) NOT NULL,
-    DeliveryLocation GEOGRAPHY NOT NULL,
+    DeliveryLocation GEOGRAPHY NULL,
     PostalAddressLine1 NVARCHAR(60) NOT NULL,
     PostalAddressLine2 NVARCHAR(60),
     PostalPostalCode NVARCHAR(10) NOT NULL,
@@ -55,7 +55,7 @@ CREATE TABLE Purchasing.Suppliers_Private (
     DeliveryAddressLine1 NVARCHAR(60) NOT NULL,
     DeliveryAddressLine2 NVARCHAR(60),
     DeliveryPostalCode NVARCHAR(10) NOT NULL,
-    DeliveryLocation GEOGRAPHY NOT NULL,
+    DeliveryLocation GEOGRAPHY NULL,
     PostalAddressLine1 NVARCHAR(60) NOT NULL,
     PostalAddressLine2 NVARCHAR(60),
     PostalPostalCode NVARCHAR(10) NOT NULL,
