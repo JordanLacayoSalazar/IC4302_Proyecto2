@@ -13,6 +13,7 @@ import Ventas from "./pages/ventas/Ventas";
 import InicioSesion from "./pages/InicioSesion";
 import CentroGestion from "./pages/CentroGestion";
 import { verificarConexionBD } from "./components/ModuloHerramientas";
+import { borrarTokenSesion } from "./components/apiHerramientas";
 import "./App.css";
 
 /** Coordina las interfaces de inicio, gestión, reportes y módulos seleccionados.
@@ -32,11 +33,36 @@ function App() {
    * @throws {Error} Si ocurre un error al actualizar el estado de React.
    */
   const cerrarSesion = () => {
+    borrarTokenSesion();
     setErrorNotificacion("");
     setErrorOcultarInterfaz("");
     setModuloActual(null);
     setInterfazActual("inicio");
     setConfirmarCierreSesion(false);
+  };
+
+  /** Dirige al usuario autenticado a su centro y verifica la conexión con la base de datos.
+   * @param {{role: string}} usuario Usuario autenticado recibido del inicio de sesión.
+   * @returns {Promise<void>} Finaliza después de completar la verificación de conexión.
+   * @throws {TypeError} Si usuario es null o undefined.
+   */
+  const ingresarUsuario = async (usuario) => {
+    setErrorNotificacion("");
+    setErrorOcultarInterfaz("");
+    setModuloActual(null);
+    setInterfazActual(
+      usuario.role === "Administrador" ? "gestion" : "reportes",
+    );
+    setVerificandoConexion(true);
+
+    try {
+      await verificarConexionBD();
+    } catch (error) {
+      const mensaje = error.message || String(error);
+      setErrorOcultarInterfaz(mensaje);
+    } finally {
+      setVerificandoConexion(false);
+    }
   };
 
   /** Abre el diálogo antes de cerrar la sesión actual.
@@ -99,12 +125,8 @@ function App() {
   if (interfazActual === "inicio") {
     contenido = (
       <InicioSesion
-        onIngresarCentro={() => abrirContenido("reportes")}
-        onIngresarModulos={() => {
-          setErrorOcultarInterfaz("");
-          setInterfazActual("gestion");
-          setModuloActual(null);
-        }}
+        onIngresarUsuario={ingresarUsuario}
+        onError={setErrorNotificacion}
       />
     );
   } else if (errorOcultarInterfaz) {

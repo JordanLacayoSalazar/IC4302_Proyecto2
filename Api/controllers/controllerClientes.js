@@ -6,6 +6,7 @@ const {
   crearRespuestaPaginada,
   consultarOpcionesPaginadas,
 } = require("../utilidades");
+const { CODIGOS_HTTP } = require("../constants");
 
 /**
  * Busca opciones de clientes y clientes de facturación por nombre.
@@ -248,7 +249,7 @@ const crearCliente = async (req, res) => {
       )
       .execute("CrearCliente");
 
-    res.status(201).json({
+    res.status(CODIGOS_HTTP.OK_CREATED).json({
       message: "Cliente creado exitosamente.",
       CustomerID: resultado.recordset?.[0]?.CustomerID ?? null,
     });
@@ -352,7 +353,7 @@ const eliminarCliente = async (req, res) => {
     res.json({ message: "Cliente eliminado exitosamente." });
   } catch (error) {
     if (error.number === 547 || error.originalError?.info?.number === 547) {
-      return res.status(409).json({
+      return res.status(CODIGOS_HTTP.ERR_CONFLICT).json({
         errorMsg:
           "No se puede eliminar este cliente porque tiene transacciones asociadas.",
       });

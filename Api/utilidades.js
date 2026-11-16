@@ -1,4 +1,7 @@
 const sql = require("mssql");
+const { obtenerBranchIdSesion } = require("./autenticacion");
+const { conectarNodo } = require("./nodos");
+const { CODIGOS_HTTP } = require("./constants");
 
 /**
  * Convierte un parámetro entero opcional en un número seguro.
@@ -19,7 +22,7 @@ const leerEnteroOpcional = (valor, nombre, opciones = {}) => {
   if (!/^\d+$/.test(texto)) {
     const error = new Error(`${nombre} debe ser un número entero válido.`);
 
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
 
     throw error;
   }
@@ -32,7 +35,7 @@ const leerEnteroOpcional = (valor, nombre, opciones = {}) => {
   if (!Number.isSafeInteger(numero) || numero < min || numero > max) {
     const error = new Error(`${nombre} está fuera del rango permitido.`);
 
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
 
     throw error;
   }
@@ -64,7 +67,7 @@ const leerNumeroOpcional = (valor, nombre, opciones = {}) => {
       `${nombre} debe ser un número válido dentro del rango permitido.`,
     );
 
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
 
     throw error;
   }
@@ -88,7 +91,7 @@ const leerParametrosPaginacion = (query = {}) => {
 
   if (![5, 10, 20].includes(filasPorPagina)) {
     const error = new Error("filasPorPagina debe ser 5, 10 o 20.");
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
     throw error;
   }
 
@@ -150,13 +153,14 @@ const consultarOpcionesPaginadas = async (procedimiento, query = {}) => {
 };
 
 /**
- * Abre una conexión con la base de datos.
+ * Abre una conexión al nodo asignado al contexto de la solicitud.
  *
- * @returns {Promise<import('mssql').ConnectionPool>}
+ * @return {Promise<import('mssql').ConnectionPool>} Pool conectado al nodo.
+ * @throws {Error} Si no se puede conectar al nodo asignado.
  */
 const conectarBaseDatos = async () => {
   try {
-    return await sql.connect(process.env.DB_CONFIG);
+    return await conectarNodo(obtenerBranchIdSesion());
   } catch (error) {
     error.envIncorrecto = true;
     throw error;
@@ -187,10 +191,14 @@ const manejarError = (res, err) => {
     baseDeDatosInaccesible;
 
   let statusCode;
-  if (Number.isInteger(err.statusCode) && err.statusCode >= 400 && err.statusCode < 600) {
-      statusCode = err.statusCode;
+  if (
+    Number.isInteger(err.statusCode) &&
+    err.statusCode >= CODIGOS_HTTP.ERR_BAD_REQUEST &&
+    err.statusCode < 600
+  ) {
+    statusCode = err.statusCode;
   } else {
-      statusCode = 500;
+    statusCode = CODIGOS_HTTP.ERR_INTERNAL_SERVER_ERROR;
   }
 
   res.status(statusCode).json({

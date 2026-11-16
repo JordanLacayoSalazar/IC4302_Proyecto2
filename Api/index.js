@@ -2,6 +2,9 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
+const { autenticarSesion } = require("./autenticacion");
+const { PUERTO_API_PREDETERMINADO } = require("./constants");
+const { iniciarSesion } = require("./controllers/controllerInicioSesion.js");
 
 // Importaciones del controlador de Proveedores
 const {
@@ -76,7 +79,13 @@ const {
 const app = express();
 app.use(cors());
 app.use(express.json());
-const port = Number(process.env.PORT) || 3000;
+const port = Number(process.env.PORT) || PUERTO_API_PREDETERMINADO;
+
+// Inicio de sesión
+app.post("/api/auth/login", iniciarSesion);
+
+// Verifica que el usuario tenga una sesión activa antes de permitir el acceso a cualquier ruta de /api
+app.use("/api", autenticarSesion);
 
 // Opciones de catálogos.
 app.get("/api/opciones/clientes", getOpcionesClientes);

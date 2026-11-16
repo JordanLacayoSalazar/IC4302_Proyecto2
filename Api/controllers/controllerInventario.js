@@ -8,6 +8,7 @@ const {
   crearRespuestaPaginada,
   consultarOpcionesPaginadas,
 } = require("../utilidades");
+const { CODIGOS_HTTP } = require("../constants");
 
 /**
  * Busca grupos de producto por nombre.
@@ -87,7 +88,9 @@ const getProductoById = async (req, res) => {
       .execute("ObtenerDetalleProducto");
 
     if (result.recordset.length === 0) {
-      return res.status(404).json({ errorMsg: "Producto no encontrado." });
+      return res
+        .status(CODIGOS_HTTP.ERR_NOT_FOUND)
+        .json({ errorMsg: "Producto no encontrado." });
     }
 
     res.json(result.recordset[0]);
@@ -180,7 +183,7 @@ const crearProducto = async (req, res) => {
       const error = new Error(
         "Complete los valores numéricos obligatorios del producto.",
       );
-      error.statusCode = 400;
+      error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
       throw error;
     }
 
@@ -210,7 +213,7 @@ const crearProducto = async (req, res) => {
       )
       .execute("CrearProducto");
 
-    res.status(201).json({
+    res.status(CODIGOS_HTTP.OK_CREATED).json({
       message: "Producto creado exitosamente.",
       ProductoID: result.recordset[0]?.ProductoID,
     });
@@ -290,7 +293,7 @@ const actualizarProducto = async (req, res) => {
       const error = new Error(
         "Complete los valores numéricos obligatorios del producto.",
       );
-      error.statusCode = 400;
+      error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
       throw error;
     }
 

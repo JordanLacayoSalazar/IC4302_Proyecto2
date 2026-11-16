@@ -1,9 +1,35 @@
+import { useState } from "react";
+import { solicitarJson, guardarTokenSesion } from "../components/apiHerramientas";
+
 /** Muestra la portada del proyecto y permite elegir una de sus dos interfaces.
- * @param {{onIngresarCentro: Function, onIngresarModulos: Function}} props Acciones para entrar al centro de reportes o a los módulos.
+ * @param {{onIngresarUsuario: Function, onError: Function}} props Acciones de autenticación.
  * @returns {JSX.Element} Interfaz de inicio.
- * @throws {Error} Si ocurre un error al renderizar la portada.
  */
-export default function InicioSesion({ onIngresarCentro, onIngresarModulos }) {
+export default function InicioSesion({ onIngresarUsuario, onError }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const iniciarSesion = async (event) => {
+    event.preventDefault();
+    setEnviando(true);
+
+    try {
+      const respuesta = await solicitarJson("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      guardarTokenSesion(respuesta.token);
+      onIngresarUsuario(respuesta.usuario);
+    } catch (error) {
+      onError(error.message || String(error));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   return (
     <section aria-labelledby="titulo-inicio" className="contenido-inicio">
       {/* Encabezado del proyecto e integrantes. */}
@@ -20,38 +46,36 @@ export default function InicioSesion({ onIngresarCentro, onIngresarModulos }) {
       </header>
 
       {/* Formulario de inicio de sesión */}
-      <div className="panel-inicio-sesion">
+      <form className="panel-inicio-sesion" onSubmit={iniciarSesion}>
         <h2>Iniciar sesión</h2>
         <label className="campo-inicio-sesion">
           <span>Nombre de usuario</span>
           <input
             autoComplete="username"
+            maxLength={50}
             name="nombreUsuario"
+            onChange={(event) => setUsername(event.target.value)}
+            required
             type="text"
+            value={username}
           />
         </label>
         <label className="campo-inicio-sesion">
           <span>Contraseña</span>
           <input
             autoComplete="current-password"
+            maxLength={100}
             name="contrasena"
+            onChange={(event) => setPassword(event.target.value)}
+            required
             type="password"
+            value={password}
           />
         </label>
-        <button className="boton-ingresar" type="button">
-          Ingresar
+        <button className="boton-ingresar" disabled={enviando} type="submit">
+          {enviando ? "Verificando..." : "Ingresar"}
         </button>
-      </div>
-
-      {/* ELIMINAR LUEGO: Botones temporales */}
-      <div aria-label="Accesos temporales" className="opciones-inicio-temporales">
-        <button onClick={onIngresarModulos} type="button">
-          Ingresar Módulos
-        </button>
-        <button onClick={onIngresarCentro} type="button">
-          Ingresar Reportes
-        </button>
-      </div>
+      </form>
     </section>
   );
 }

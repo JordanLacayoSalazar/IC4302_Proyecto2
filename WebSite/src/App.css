@@ -107,30 +107,6 @@
     background: #1d3158;
 }
 
-.opciones-inicio-temporales {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 18px;
-}
-
-.opciones-inicio-temporales button {
-    padding: 7px 10px;
-    border: 0;
-    background: transparent;
-    color: #52627c;
-    font: inherit;
-    font-size: 12px;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    cursor: pointer;
-}
-
-.opciones-inicio-temporales button:hover {
-    color: #284272;
-}
-
-.opciones-inicio-temporales button:focus-visible,
 .boton-ingresar:focus-visible,
 .tarjeta-gestion:focus-visible {
     outline: 3px solid #6982a9;

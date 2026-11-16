@@ -5,8 +5,11 @@ export const API_URL = "http://localhost:3000";
  * @throws {Error} Si falla la solicitud o la base de datos no está conectada.
  */
 export const verificarConexionBD = async () => {
-  const response = await fetch(`${API_URL}/api/verificar-conexion`);
-  const data = await response.json();
+  const token = window.sessionStorage.getItem("tokenSesion");
+  const response = await fetch(`${API_URL}/api/verificar-conexion`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     const error = new Error(

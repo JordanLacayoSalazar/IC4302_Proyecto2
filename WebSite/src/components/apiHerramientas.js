@@ -34,8 +34,21 @@ export const construirQuery = (parametros = {}) => {
  */
 export const solicitarJson = async (ruta, opciones = {}) => {
   const url = ruta.startsWith("http") ? ruta : `${API_URL}${ruta}`;
+  const encabezados = new Headers(opciones.headers || {});
+  const token =
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem("tokenSesion")
+      : null;
 
-  const respuesta = await fetch(url, opciones);
+  if (
+    token &&
+    url.startsWith(`${API_URL}/api/`) &&
+    !encabezados.has("Authorization")
+  ) {
+    encabezados.set("Authorization", `Bearer ${token}`);
+  }
+
+  const respuesta = await fetch(url, { ...opciones, headers: encabezados });
   const datos = await respuesta.json().catch(() => ({}));
 
   if (!respuesta.ok) {
@@ -48,6 +61,14 @@ export const solicitarJson = async (ruta, opciones = {}) => {
   }
 
   return datos;
+};
+
+export const guardarTokenSesion = (token) => {
+  window.sessionStorage.setItem("tokenSesion", token);
+};
+
+export const borrarTokenSesion = () => {
+  window.sessionStorage.removeItem("tokenSesion");
 };
 
 /**

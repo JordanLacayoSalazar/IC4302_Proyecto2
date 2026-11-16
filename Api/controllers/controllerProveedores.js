@@ -8,6 +8,7 @@ const {
   crearRespuestaPaginada,
   consultarOpcionesPaginadas,
 } = require("../utilidades");
+const { CODIGOS_HTTP } = require("../constants");
 
 /**
  * Busca proveedores por nombre para los campos de opción.
@@ -110,7 +111,9 @@ const getProveedorById = async (req, res) => {
       .execute("ObtenerDetalleProveedor");
 
     if (result.recordset.length === 0) {
-      return res.status(404).json({ errorMsg: "Proveedor no encontrado." });
+      return res
+        .status(CODIGOS_HTTP.ERR_NOT_FOUND)
+        .json({ errorMsg: "Proveedor no encontrado." });
     }
 
     res.json(result.recordset[0]);
@@ -252,7 +255,7 @@ const crearProveedor = async (req, res) => {
       .input("PaymentDays", sql.Int, paymentDays)
       .execute("CrearProveedor");
 
-    res.status(201).json({
+    res.status(CODIGOS_HTTP.OK_CREATED).json({
       message: "Proveedor creado exitosamente.",
       SupplierID: result.recordset[0]?.SupplierID,
     });

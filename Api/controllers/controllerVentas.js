@@ -8,6 +8,7 @@ const {
   crearRespuestaPaginada,
   consultarOpcionesPaginadas,
 } = require("../utilidades");
+const { CODIGOS_HTTP } = require("../constants");
 
 /**
  * Busca tipos de empaque por nombre para las líneas de venta.
@@ -38,7 +39,7 @@ const leerIdRequerido = (valor, nombre) => {
   const id = leerEnteroOpcional(valor, nombre, { min: 1 });
   if (id === null) {
     const error = new Error(`${nombre} es obligatorio.`);
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
     throw error;
   }
   return id;
@@ -64,7 +65,7 @@ const leerFechaOpcional = (valor, nombre) => {
     fechaParseada.toISOString().slice(0, 10) !== fecha
   ) {
     const error = new Error(`${nombre} debe ser una fecha válida.`);
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
     throw error;
   }
 
@@ -82,7 +83,7 @@ const leerFechaRequerida = (valor, nombre) => {
   const fecha = leerFechaOpcional(valor, nombre);
   if (fecha === null) {
     const error = new Error(`${nombre} es obligatorio.`);
-    error.statusCode = 400;
+    error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
     throw error;
   }
   return fecha;
@@ -152,7 +153,9 @@ const getVentaById = async (req, res) => {
       .execute("ObtenerDetalleVenta");
 
     if (!resultado.recordsets[0]?.length) {
-      return res.status(404).json({ errorMsg: "Venta no encontrada." });
+      return res
+        .status(CODIGOS_HTTP.ERR_NOT_FOUND)
+        .json({ errorMsg: "Venta no encontrada." });
     }
 
     res.json({
@@ -257,7 +260,7 @@ const crearVenta = async (req, res) => {
       )
       .execute("InsertarEncabezadoVenta");
 
-    res.status(201).json({
+    res.status(CODIGOS_HTTP.OK_CREATED).json({
       message: "Encabezado de venta creado exitosamente.",
       NumeroFactura: resultado.recordset[0]?.NumeroFactura,
     });
@@ -289,7 +292,7 @@ const crearLineaVenta = async (req, res) => {
     );
     if (cantidad === null || precioUnitario === null || impuestoAplicado === null) {
       const error = new Error("Complete cantidad, precio e impuesto de la línea.");
-      error.statusCode = 400;
+      error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
       throw error;
     }
 
@@ -308,7 +311,7 @@ const crearLineaVenta = async (req, res) => {
       .input("ImpuestoAplicado", sql.Decimal(18, 3), impuestoAplicado)
       .execute("InsertarLineaVenta");
 
-    res.status(201).json({
+    res.status(CODIGOS_HTTP.OK_CREATED).json({
       message: "Línea de venta agregada exitosamente.",
       ...resultado.recordset[0],
     });
@@ -425,7 +428,7 @@ const actualizarLineaVenta = async (req, res) => {
     );
     if (cantidad === null || precioUnitario === null || impuestoAplicado === null) {
       const error = new Error("Complete cantidad, precio e impuesto de la línea.");
-      error.statusCode = 400;
+      error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
       throw error;
     }
 
@@ -450,10 +453,12 @@ const actualizarLineaVenta = async (req, res) => {
     res.json(resultado.recordset[0]);
   } catch (error) {
     if (error.number === 50014) {
-      return res.status(404).json({ errorMsg: "Línea de venta no encontrada." });
+      return res
+        .status(CODIGOS_HTTP.ERR_NOT_FOUND)
+        .json({ errorMsg: "Línea de venta no encontrada." });
     }
     if (error.number === 50039) {
-      error.statusCode = 400;
+      error.statusCode = CODIGOS_HTTP.ERR_BAD_REQUEST;
     }
     manejarError(res, error);
   }
