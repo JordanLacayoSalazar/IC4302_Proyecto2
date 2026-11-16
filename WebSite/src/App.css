@@ -91,6 +91,40 @@
     outline: 3px solid #28427220;
 }
 
+.contenedor-contrasena {
+    position: relative;
+}
+
+.campo-inicio-sesion .contenedor-contrasena input {
+    padding-right: 44px;
+}
+
+.boton-visibilidad-contrasena {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #475569;
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.boton-visibilidad-contrasena:hover {
+    background: #edf2ef;
+}
+
+.boton-visibilidad-contrasena:focus-visible {
+    outline: 2px solid #284272;
+    outline-offset: 2px;
+}
+
 .boton-ingresar {
     min-height: 42px;
     margin-top: 3px;
@@ -283,7 +317,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 0 12px;
+}
+
+.info-servidor-popover {
+    min-width: 220px;
+    padding: 16px;
+}
+
+.info-servidor-popover p {
+    margin: 0;
+}
+
+.info-servidor-popover p + p {
+    margin-top: 6px;
 }
 
 .tarjeta-centro-gestion.MuiPaper-root,

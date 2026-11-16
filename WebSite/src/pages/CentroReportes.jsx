@@ -618,7 +618,7 @@ function FiltroAutocomplete({
  */
 export default function CentroReportes({
   onErrorNotificacion,
-  onErrorOcultarModulo,
+  onErrorOcultarInterfaz,
 }) {
   const [reporteSeleccionadoId, setReporteSeleccionadoId] = useState(null);
 
@@ -684,14 +684,14 @@ export default function CentroReportes({
         mostrarError(
           error,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar opciones de reportes",
         );
       }
     };
 
     cargarCatalogos();
-  }, [onErrorNotificacion, onErrorOcultarModulo]);
+  }, [onErrorNotificacion, onErrorOcultarInterfaz]);
 
   /**
    * Selecciona un reporte y reinicia filtros, filas y paginación.
@@ -779,7 +779,7 @@ export default function CentroReportes({
         "Seleccione años válidos presentes en los datos del reporte.",
       );
 
-      mostrarError(error, onErrorNotificacion, onErrorOcultarModulo);
+      mostrarError(error, onErrorNotificacion, onErrorOcultarInterfaz);
 
       return;
     }
@@ -793,7 +793,7 @@ export default function CentroReportes({
         "El año inicial no puede ser mayor que el año final.",
       );
 
-      mostrarError(error, onErrorNotificacion, onErrorOcultarModulo);
+      mostrarError(error, onErrorNotificacion, onErrorOcultarInterfaz);
 
       return;
     }
@@ -806,7 +806,7 @@ export default function CentroReportes({
           "El mes debe ser un número entero entre 1 y 12.",
         );
 
-        mostrarError(error, onErrorNotificacion, onErrorOcultarModulo);
+        mostrarError(error, onErrorNotificacion, onErrorOcultarInterfaz);
 
         return;
       }
@@ -834,7 +834,7 @@ export default function CentroReportes({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         `Error al generar el reporte ${reporteActual.num}`,
       );
     } finally {

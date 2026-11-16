@@ -149,7 +149,18 @@ const autenticarSesion = (req, res, next) => {
 const obtenerBranchIdSesion = () =>
   contextoSesion.getStore()?.branchId ?? BRANCH_ID_PREDETERMINADO;
 
+/** Restringe los reportes y sus filtros a sesiones del nodo Corporativo. */
+const autorizarReportesCorporativos = (req, res, next) => {
+  if (req.usuario?.branchId !== 1) {
+    return res.status(403).json({
+      errorMsg: "Los reportes solo están disponibles en el nodo Corporativo.",
+    });
+  }
+  return next();
+};
+
 module.exports = {
+  autorizarReportesCorporativos,
   autenticarSesion,
   crearTokenSesion,
   obtenerBranchIdSesion,

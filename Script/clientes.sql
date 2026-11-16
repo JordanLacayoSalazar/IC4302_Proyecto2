@@ -1,5 +1,16 @@
-USE WideWorldImporters;
+-- Ejecutar conectado a cada base WWI; no usar la base original WideWorldImporters.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_WARNINGS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
 GO
+IF DB_NAME() NOT IN (N'WWI_Corporativo', N'WWI_SanJose', N'WWI_Limon')
+    THROW 50040, 'Conectese a WWI_Corporativo, WWI_SanJose o WWI_Limon.', 1;
+GO
+
 
 /*
 ============================================
@@ -7,7 +18,7 @@ GO
   Obtiene clientes con categoría y método de entrega, con filtros y paginación.
 ============================================
 */
-CREATE OR ALTER PROCEDURE ObtenerClientes
+CREATE OR ALTER PROCEDURE dbo.ObtenerClientes
     @NombreBusqueda NVARCHAR(100) = NULL,
     @CategoriaBusqueda NVARCHAR(100) = NULL,
     @MetodoEntregaBusqueda NVARCHAR(100) = NULL,
@@ -17,7 +28,6 @@ AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
-
     SELECT
         c.CustomerID,
         c.CustomerName AS NombreCliente,
@@ -45,10 +55,21 @@ GO
   Obtiene el detalle completo de un cliente específico.
 ============================================
 */
-CREATE OR ALTER PROCEDURE ObtenerDetalleCliente
+CREATE OR ALTER PROCEDURE dbo.ObtenerDetalleCliente
     @CustomerID INT
 AS
 BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[ObtenerDetalleCliente]
+            @CustomerID = @CustomerID;
+        RETURN;
+    END;
+
     SELECT
         c.CustomerID,
         c.BillToCustomerID,
@@ -157,7 +178,7 @@ GO
     Inserta un nuevo cliente en la base de datos.
 ==========================================
 */
-CREATE OR ALTER PROCEDURE CrearCliente
+CREATE OR ALTER PROCEDURE dbo.CrearCliente
     @CustomerName NVARCHAR(100),
     @BillToCustomerID INT,
     @CustomerCategoryID INT,
@@ -184,6 +205,38 @@ CREATE OR ALTER PROCEDURE CrearCliente
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[CrearCliente]
+                @CustomerName = @CustomerName,
+                @BillToCustomerID = @BillToCustomerID,
+                @CustomerCategoryID = @CustomerCategoryID,
+                @PrimaryContactPersonID = @PrimaryContactPersonID,
+                @DeliveryMethodID = @DeliveryMethodID,
+                @DeliveryCityID = @DeliveryCityID,
+                @BuyingGroupID = @BuyingGroupID,
+                @AlternateContactPersonID = @AlternateContactPersonID,
+                @PostalCityID = @PostalCityID,
+                @PhoneNumber = @PhoneNumber,
+                @FaxNumber = @FaxNumber,
+                @WebsiteURL = @WebsiteURL,
+                @PaymentDays = @PaymentDays,
+                @DeliveryAddressLine1 = @DeliveryAddressLine1,
+                @DeliveryAddressLine2 = @DeliveryAddressLine2,
+                @DeliveryPostalCode = @DeliveryPostalCode,
+                @PostalAddressLine1 = @PostalAddressLine1,
+                @PostalAddressLine2 = @PostalAddressLine2,
+                @PostalPostalCode = @PostalPostalCode,
+                @Latitud = @Latitud,
+                @Longitud = @Longitud,
+                @CreditLimit = @CreditLimit,
+                @StandardDiscountPercentage = @StandardDiscountPercentage;
+        RETURN;
+    END;
+
 
     DECLARE @DeliveryLocation GEOGRAPHY = NULL;
     DECLARE @NuevoCustomerID INT;
@@ -195,50 +248,34 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        INSERT INTO syn_Clientes (
-            CustomerName,
-            BillToCustomerID,
-            CustomerCategoryID,
-            BuyingGroupID,
-            PrimaryContactPersonID,
-            AlternateContactPersonID,
-            DeliveryMethodID,
-            DeliveryCityID,
-            PostalCityID,
-            CreditLimit,
-            AccountOpenedDate,
-            StandardDiscountPercentage,
-            IsStatementSent,
-            IsOnCreditHold,
-            PaymentDays,
-            PhoneNumber,
-            FaxNumber,
-            WebsiteURL,
-            DeliveryAddressLine1,
-            DeliveryAddressLine2,
-            DeliveryPostalCode,
-            DeliveryLocation,
-            PostalAddressLine1,
-            PostalAddressLine2,
-            PostalPostalCode,
-            LastEditedBy
-        )
-        VALUES (
+        SET @NuevoCustomerID = NEXT VALUE FOR Repl.seq_Customers_Public;
+        INSERT INTO Sales.Customers_Public (
+            BranchID, CustomerID, CustomerName, BillToCustomerID, CustomerCategoryID, BuyingGroupID, DeliveryMethodID, CreditLimit, AccountOpenedDate, StandardDiscountPercentage, IsStatementSent, IsOnCreditHold, PaymentDays, LastEditedBy
+        ) VALUES (
+            1,
+            @NuevoCustomerID,
             @CustomerName,
             @BillToCustomerID,
             @CustomerCategoryID,
             @BuyingGroupID,
-            @PrimaryContactPersonID,
-            @AlternateContactPersonID,
             @DeliveryMethodID,
-            @DeliveryCityID,
-            ISNULL(@PostalCityID, @DeliveryCityID),
             @CreditLimit,
             CAST(GETDATE() AS DATE),
             ISNULL(@StandardDiscountPercentage, 0),
-            0, -- No se envía el estado de cuenta por defecto
-            0, -- No está en retención de crédito por defecto
+            0,
+            0,
             ISNULL(@PaymentDays, 7),
+            1
+        );
+        INSERT INTO Sales.Customers_Private (
+            BranchID, CustomerID, PrimaryContactPersonID, AlternateContactPersonID, DeliveryCityID, PostalCityID, PhoneNumber, FaxNumber, WebsiteURL, DeliveryAddressLine1, DeliveryAddressLine2, DeliveryPostalCode, DeliveryLocation, PostalAddressLine1, PostalAddressLine2, PostalPostalCode
+        ) VALUES (
+            1,
+            @NuevoCustomerID,
+            @PrimaryContactPersonID,
+            @AlternateContactPersonID,
+            @DeliveryCityID,
+            ISNULL(@PostalCityID, @DeliveryCityID),
             ISNULL(@PhoneNumber, 'N/A'),
             ISNULL(@FaxNumber, 'N/A'),
             ISNULL(@WebsiteURL, 'N/A'),
@@ -248,11 +285,8 @@ BEGIN
             @DeliveryLocation,
             ISNULL(@PostalAddressLine1, 'N/A'),
             @PostalAddressLine2,
-            ISNULL(@PostalPostalCode, 'N/A'),
-            1 -- El ID del usuario que realiza la inserción (en este caso, 1 para el administrador)
+            ISNULL(@PostalPostalCode, 'N/A')
         );
-
-        SET @NuevoCustomerID = SCOPE_IDENTITY();
 
         COMMIT TRANSACTION;
         SELECT @NuevoCustomerID AS CustomerID;
@@ -271,7 +305,7 @@ GO
     Actualiza la información de un cliente existente en la base de datos.
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ActualizarCliente
+CREATE OR ALTER PROCEDURE dbo.ActualizarCliente
     @CustomerID INT,
     @CustomerName NVARCHAR(100),
     @BillToCustomerID INT = NULL,
@@ -300,6 +334,40 @@ CREATE OR ALTER PROCEDURE ActualizarCliente
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[ActualizarCliente]
+                @CustomerID = @CustomerID,
+                @CustomerName = @CustomerName,
+                @BillToCustomerID = @BillToCustomerID,
+                @CustomerCategoryID = @CustomerCategoryID,
+                @BuyingGroupID = @BuyingGroupID,
+                @PrimaryContactPersonID = @PrimaryContactPersonID,
+                @AlternateContactPersonID = @AlternateContactPersonID,
+                @DeliveryMethodID = @DeliveryMethodID,
+                @DeliveryCityID = @DeliveryCityID,
+                @PostalCityID = @PostalCityID,
+                @PhoneNumber = @PhoneNumber,
+                @FaxNumber = @FaxNumber,
+                @WebsiteURL = @WebsiteURL,
+                @PaymentDays = @PaymentDays,
+                @DeliveryAddressLine1 = @DeliveryAddressLine1,
+                @DeliveryAddressLine2 = @DeliveryAddressLine2,
+                @DeliveryPostalCode = @DeliveryPostalCode,
+                @PostalAddressLine1 = @PostalAddressLine1,
+                @PostalAddressLine2 = @PostalAddressLine2,
+                @PostalPostalCode = @PostalPostalCode,
+                @Latitud = @Latitud,
+                @Longitud = @Longitud,
+                @CreditLimit = @CreditLimit,
+                @StandardDiscountPercentage = @StandardDiscountPercentage,
+                @ActualizarCreditLimit = @ActualizarCreditLimit;
+        RETURN;
+    END;
+
 
     DECLARE @DeliveryLocation GEOGRAPHY = NULL;
     IF @Latitud IS NOT NULL AND @Longitud IS NOT NULL
@@ -308,26 +376,14 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        UPDATE syn_Clientes
-        SET CustomerName = LTRIM(RTRIM(@CustomerName)),
+        DECLARE @Origen INT = (SELECT BranchID FROM Sales.Customers_Public WHERE CustomerID = @CustomerID);
+        IF @Origen IS NULL THROW 50042, 'El registro indicado no existe.', 1;
+        UPDATE Sales.Customers_Public SET CustomerName = LTRIM(RTRIM(@CustomerName)),
             BillToCustomerID = ISNULL(@BillToCustomerID, BillToCustomerID),
             CustomerCategoryID = ISNULL(@CustomerCategoryID, CustomerCategoryID),
             BuyingGroupID = ISNULL(@BuyingGroupID, BuyingGroupID),
-            PrimaryContactPersonID = ISNULL(@PrimaryContactPersonID, PrimaryContactPersonID),
-            AlternateContactPersonID = ISNULL(@AlternateContactPersonID, AlternateContactPersonID),
             DeliveryMethodID = ISNULL(@DeliveryMethodID, DeliveryMethodID),
-            DeliveryCityID = ISNULL(@DeliveryCityID, DeliveryCityID),
-            PostalCityID = ISNULL(@PostalCityID, PostalCityID),
-            PhoneNumber = ISNULL(LTRIM(RTRIM(@PhoneNumber)), PhoneNumber),
-            FaxNumber = ISNULL(LTRIM(RTRIM(@FaxNumber)), FaxNumber),
-            WebsiteURL = ISNULL(LTRIM(RTRIM(@WebsiteURL)), WebsiteURL),
             PaymentDays = ISNULL(@PaymentDays, PaymentDays),
-            DeliveryAddressLine1 = ISNULL(LTRIM(RTRIM(@DeliveryAddressLine1)), DeliveryAddressLine1),
-            DeliveryAddressLine2 = ISNULL(LTRIM(RTRIM(@DeliveryAddressLine2)), DeliveryAddressLine2),
-            DeliveryPostalCode = ISNULL(LTRIM(RTRIM(@DeliveryPostalCode)), DeliveryPostalCode),
-            PostalAddressLine1 = ISNULL(LTRIM(RTRIM(@PostalAddressLine1)), PostalAddressLine1),
-            PostalAddressLine2 = ISNULL(LTRIM(RTRIM(@PostalAddressLine2)), PostalAddressLine2),
-            PostalPostalCode = ISNULL(LTRIM(RTRIM(@PostalPostalCode)), PostalPostalCode),
             CreditLimit = CASE
                 WHEN @ActualizarCreditLimit = 1 THEN @CreditLimit
                 ELSE CreditLimit
@@ -336,9 +392,24 @@ BEGIN
                 @StandardDiscountPercentage,
                 StandardDiscountPercentage
             ),
-            DeliveryLocation = ISNULL(@DeliveryLocation, DeliveryLocation),
             LastEditedBy = 1
-        WHERE CustomerID = @CustomerID;
+        WHERE BranchID = @Origen AND CustomerID = @CustomerID;
+        UPDATE Sales.Customers_Private SET PrimaryContactPersonID = ISNULL(@PrimaryContactPersonID, PrimaryContactPersonID),
+            AlternateContactPersonID = ISNULL(@AlternateContactPersonID, AlternateContactPersonID),
+            DeliveryCityID = ISNULL(@DeliveryCityID, DeliveryCityID),
+            PostalCityID = ISNULL(@PostalCityID, PostalCityID),
+            PhoneNumber = ISNULL(LTRIM(RTRIM(@PhoneNumber)), PhoneNumber),
+            FaxNumber = ISNULL(LTRIM(RTRIM(@FaxNumber)), FaxNumber),
+            WebsiteURL = ISNULL(LTRIM(RTRIM(@WebsiteURL)), WebsiteURL),
+            DeliveryAddressLine1 = ISNULL(LTRIM(RTRIM(@DeliveryAddressLine1)), DeliveryAddressLine1),
+            DeliveryAddressLine2 = ISNULL(LTRIM(RTRIM(@DeliveryAddressLine2)), DeliveryAddressLine2),
+            DeliveryPostalCode = ISNULL(LTRIM(RTRIM(@DeliveryPostalCode)), DeliveryPostalCode),
+            PostalAddressLine1 = ISNULL(LTRIM(RTRIM(@PostalAddressLine1)), PostalAddressLine1),
+            PostalAddressLine2 = ISNULL(LTRIM(RTRIM(@PostalAddressLine2)), PostalAddressLine2),
+            PostalPostalCode = ISNULL(LTRIM(RTRIM(@PostalPostalCode)), PostalPostalCode),
+            DeliveryLocation = ISNULL(@DeliveryLocation, DeliveryLocation)
+        WHERE BranchID = @Origen AND CustomerID = @CustomerID;
+        IF @@ROWCOUNT <> 1 THROW 50049, 'Falta el fragmento privado en Corporativo; revise la migracion.', 1;
 
         COMMIT TRANSACTION;
     END TRY
@@ -356,16 +427,30 @@ GO
     Elimina un cliente de la base de datos.
 ==========================================
 */
-CREATE OR ALTER PROCEDURE EliminarCliente
+CREATE OR ALTER PROCEDURE dbo.EliminarCliente
     @CustomerID INT
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[EliminarCliente]
+                @CustomerID = @CustomerID;
+        RETURN;
+    END;
+
+
+    EXEC dbo.sp_ValidarEliminacionGlobal @Entidad = 'Cliente', @ID = @CustomerID;
 
     BEGIN TRY
+        SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
         BEGIN TRANSACTION;
-        DELETE FROM syn_Clientes
-        WHERE CustomerID = @CustomerID;
+        EXEC dbo.sp_ValidarEliminacionLocal @Entidad = 'Cliente', @ID = @CustomerID;
+        DELETE FROM Sales.Customers_Private WHERE CustomerID = @CustomerID;
+        DELETE FROM Sales.Customers_Public WHERE CustomerID = @CustomerID;
         COMMIT TRANSACTION;
     END TRY
 

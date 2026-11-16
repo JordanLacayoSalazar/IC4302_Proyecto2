@@ -1,5 +1,16 @@
-USE WideWorldImporters;
+-- Ejecutar conectado a cada base WWI; no usar la base original WideWorldImporters.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_WARNINGS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
 GO
+IF DB_NAME() NOT IN (N'WWI_Corporativo', N'WWI_SanJose', N'WWI_Limon')
+    THROW 50040, 'Conectese a WWI_Corporativo, WWI_SanJose o WWI_Limon.', 1;
+GO
+
 
 /*
 Lista de códigos de errores:
@@ -19,7 +30,7 @@ monto total. Permite filtros opcionales y acumulativos por número de factura,
 cliente, método de entrega, rango de fechas y rango de monto.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerVentas
+CREATE OR ALTER PROCEDURE dbo.ObtenerVentas
     @NumeroFactura INT = NULL,
     @NombreCliente NVARCHAR(100) = NULL,
     @MetodoEntregaID INT = NULL,
@@ -28,22 +39,25 @@ CREATE OR ALTER PROCEDURE ObtenerVentas
     @MontoMinimo DECIMAL(18, 2) = NULL,
     @MontoMaximo DECIMAL(18, 2) = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
-    -- Se calcula el monto total de cada factura sumando los precios extendidos y los impuestos de sus líneas
+    -- ExtendedPrice ya incluye TaxAmount: no sumar el impuesto por segunda vez.
     WITH TotalesFactura AS (
         SELECT
-            il.InvoiceID,
-            SUM(ISNULL(il.ExtendedPrice, 0) + ISNULL(il.TaxAmount, 0)) AS Monto
+            il.BranchID, il.InvoiceID,
+            SUM(ISNULL(il.ExtendedPrice, 0)) AS Monto
         FROM syn_LineasFactura AS il
-        GROUP BY il.InvoiceID
+        GROUP BY il.BranchID, il.InvoiceID
     )
     SELECT
+        i.BranchID,
         i.InvoiceID AS NumeroFactura,
         i.InvoiceDate AS FechaFactura,
         i.CustomerID,
@@ -57,8 +71,8 @@ BEGIN
     INNER JOIN syn_MetodosEntrega AS dm
         ON i.DeliveryMethodID = dm.DeliveryMethodID
     LEFT JOIN TotalesFactura AS tf -- Se hace LEFT JOIN para incluir facturas sin líneas
-        ON i.InvoiceID = tf.InvoiceID
-    WHERE -- Filtros opcionales y acumulativos
+        ON i.InvoiceID = tf.InvoiceID AND i.BranchID = tf.BranchID
+    WHERE (@BranchID IS NULL OR i.BranchID = @BranchID) AND (dbo.fn_BranchIDLocal() = 1 OR i.BranchID = dbo.fn_BranchIDLocal()) AND -- Filtros opcionales y acumulativos
         (@NumeroFactura IS NULL OR i.InvoiceID = @NumeroFactura)
         AND (@MetodoEntregaID IS NULL OR i.DeliveryMethodID = @MetodoEntregaID)
         AND (NULLIF(LTRIM(RTRIM(@NombreCliente)), '') IS NULL
@@ -78,14 +92,33 @@ GO
 PROCEDIMIENTO: ObtenerDetalleVenta
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerDetalleVenta
-    @InvoiceID INT
+CREATE OR ALTER PROCEDURE dbo.ObtenerDetalleVenta
+    @InvoiceID INT,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, (SELECT BranchID FROM syn_Facturas WHERE InvoiceID = @InvoiceID));
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[ObtenerDetalleVenta] @InvoiceID = @InvoiceID;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[ObtenerDetalleVenta] @InvoiceID = @InvoiceID;
+        RETURN;
+    END;
+
 
     -- Encabezado de la factura
     SELECT
+        i.BranchID,
         i.InvoiceID AS NumeroFactura,
         i.CustomerID,
         i.BillToCustomerID,
@@ -119,10 +152,11 @@ BEGIN
         ON i.AccountsPersonID = cuentas.PersonID
     INNER JOIN syn_Personas AS preparado
         ON i.PackedByPersonID = preparado.PersonID
-    WHERE i.InvoiceID = @InvoiceID;
+    WHERE i.BranchID = dbo.fn_BranchIDLocal() AND i.InvoiceID = @InvoiceID;
 
     -- Detalle de la factura (líneas)
     SELECT
+        il.BranchID,
         il.InvoiceLineID,
         il.StockItemID,
         il.PackageTypeID,
@@ -135,7 +169,7 @@ BEGIN
     FROM syn_LineasFactura AS il
     INNER JOIN syn_Productos AS si
         ON il.StockItemID = si.StockItemID
-    WHERE il.InvoiceID = @InvoiceID
+    WHERE il.BranchID = dbo.fn_BranchIDLocal() AND il.InvoiceID = @InvoiceID
     ORDER BY il.InvoiceLineID ASC;
 END;
 GO
@@ -149,7 +183,7 @@ InvoiceID, los contadores y los campos de auditoría se generan/establecen
 desde el sistema. Este procedimiento no inserta líneas de factura.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE InsertarEncabezadoVenta
+CREATE OR ALTER PROCEDURE dbo.InsertarEncabezadoVenta
     @CustomerID INT,
     @BillToCustomerID INT,
     @DeliveryMethodID INT,
@@ -159,35 +193,48 @@ CREATE OR ALTER PROCEDURE InsertarEncabezadoVenta
     @PackedByPersonID INT,
     @InvoiceDate DATE,
     @CustomerPurchaseOrderNumber NVARCHAR(20) = NULL,
-    @DeliveryInstructions NVARCHAR(MAX) = NULL
+    @DeliveryInstructions NVARCHAR(MAX) = NULL,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, dbo.fn_BranchIDLocal());
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[InsertarEncabezadoVenta] @CustomerID = @CustomerID, @BillToCustomerID = @BillToCustomerID, @DeliveryMethodID = @DeliveryMethodID, @ContactPersonID = @ContactPersonID, @AccountsPersonID = @AccountsPersonID, @SalespersonPersonID = @SalespersonPersonID, @PackedByPersonID = @PackedByPersonID, @InvoiceDate = @InvoiceDate, @CustomerPurchaseOrderNumber = @CustomerPurchaseOrderNumber, @DeliveryInstructions = @DeliveryInstructions;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[InsertarEncabezadoVenta] @CustomerID = @CustomerID, @BillToCustomerID = @BillToCustomerID, @DeliveryMethodID = @DeliveryMethodID, @ContactPersonID = @ContactPersonID, @AccountsPersonID = @AccountsPersonID, @SalespersonPersonID = @SalespersonPersonID, @PackedByPersonID = @PackedByPersonID, @InvoiceDate = @InvoiceDate, @CustomerPurchaseOrderNumber = @CustomerPurchaseOrderNumber, @DeliveryInstructions = @DeliveryInstructions;
+        RETURN;
+    END;
+
     DECLARE @InvoiceID INT;
 
     BEGIN TRY
-        SELECT @InvoiceID = NEXT VALUE FOR Sequences.InvoiceID;
+        SELECT @InvoiceID = NEXT VALUE FOR Repl.seq_Invoices;
 
         BEGIN TRANSACTION;
+        IF (@CustomerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Clientes WHERE CustomerID = @CustomerID)) OR
+           (@BillToCustomerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Clientes WHERE CustomerID = @BillToCustomerID)) OR
+           (@DeliveryMethodID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_MetodosEntrega WHERE DeliveryMethodID = @DeliveryMethodID)) OR
+           (@ContactPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @ContactPersonID)) OR
+           (@AccountsPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @AccountsPersonID)) OR
+           (@SalespersonPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @SalespersonPersonID)) OR
+           (@PackedByPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @PackedByPersonID))
+            THROW 50050, 'El cliente, metodo de entrega o persona indicada no existe.', 1;
+
 
         INSERT INTO syn_Facturas (
-            InvoiceID,
-            CustomerID,
-            BillToCustomerID,
-            DeliveryMethodID,
-            ContactPersonID,
-            AccountsPersonID,
-            SalespersonPersonID,
-            PackedByPersonID,
-            InvoiceDate,
-            CustomerPurchaseOrderNumber,
-            IsCreditNote,
-            TotalDryItems,
-            TotalChillerItems,
-            DeliveryInstructions,
-            LastEditedBy
-        )
-        VALUES (
+            BranchID, InvoiceID, CustomerID, BillToCustomerID, DeliveryMethodID, ContactPersonID, AccountsPersonID, SalespersonPersonID, PackedByPersonID, InvoiceDate, CustomerPurchaseOrderNumber, IsCreditNote, TotalDryItems, TotalChillerItems, DeliveryInstructions, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
             @InvoiceID,
             @CustomerID,
             @BillToCustomerID,
@@ -225,16 +272,34 @@ impuesto monetario, la ganancia y el total se calculan en el procedimiento.
 La escritura se limita a Sales.InvoiceLines.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE InsertarLineaVenta
+CREATE OR ALTER PROCEDURE dbo.InsertarLineaVenta
     @InvoiceID INT,
     @StockItemID INT,
     @PackageTypeID INT,
     @Cantidad INT,
     @PrecioUnitario DECIMAL(18, 2),
-    @ImpuestoAplicado DECIMAL(18, 3)
+    @ImpuestoAplicado DECIMAL(18, 3),
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, (SELECT BranchID FROM syn_Facturas WHERE InvoiceID = @InvoiceID));
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[InsertarLineaVenta] @InvoiceID = @InvoiceID, @StockItemID = @StockItemID, @PackageTypeID = @PackageTypeID, @Cantidad = @Cantidad, @PrecioUnitario = @PrecioUnitario, @ImpuestoAplicado = @ImpuestoAplicado;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[InsertarLineaVenta] @InvoiceID = @InvoiceID, @StockItemID = @StockItemID, @PackageTypeID = @PackageTypeID, @Cantidad = @Cantidad, @PrecioUnitario = @PrecioUnitario, @ImpuestoAplicado = @ImpuestoAplicado;
+        RETURN;
+    END;
+
     SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     -- Para que no se pueda eliminar la factura mientras se inserta la línea, especialmente al verificar que la factura existe 
 
@@ -251,7 +316,7 @@ BEGIN
         IF NOT EXISTS (
             SELECT 1
             FROM syn_Facturas
-            WHERE InvoiceID = @InvoiceID
+            WHERE BranchID = dbo.fn_BranchIDLocal() AND InvoiceID = @InvoiceID
         )
         BEGIN
             ;THROW 50011, 'No existe la factura indicada.', 1;
@@ -263,7 +328,7 @@ BEGIN
             @UltimoCosto = sih.LastCostPrice
         FROM syn_Productos AS si
         INNER JOIN syn_Inventario AS sih
-            ON si.StockItemID = sih.StockItemID
+            ON si.StockItemID = sih.StockItemID AND sih.BranchID = dbo.fn_BranchIDLocal()
         WHERE si.StockItemID = @StockItemID;
 
         IF @Descripcion IS NULL OR @UltimoCosto IS NULL
@@ -271,28 +336,23 @@ BEGIN
             ;THROW 50012, 'No existe el producto o no tiene un costo de inventario disponible.', 1;
         END;
 
+        IF @Cantidad IS NULL OR @Cantidad <= 0 OR @PrecioUnitario IS NULL OR @PrecioUnitario < 0 OR @ImpuestoAplicado IS NULL OR @ImpuestoAplicado < 0
+            THROW 50047, 'Cantidad, precio o impuesto de la linea no valido.', 1;
+
+        IF NOT EXISTS (SELECT 1 FROM syn_TiposEmpaque WHERE PackageTypeID = @PackageTypeID)
+            THROW 50051, 'El tipo de empaque indicado no existe.', 1;
+
         SET @MontoImpuesto =
             @Cantidad * @PrecioUnitario * @ImpuestoAplicado / 100.0;
         SET @GananciaLinea = @Cantidad * (@PrecioUnitario - @UltimoCosto);
         SET @PrecioExtendido = @Cantidad * @PrecioUnitario + @MontoImpuesto;
 
-        SELECT @InvoiceLineID = NEXT VALUE FOR Sequences.InvoiceLineID;
+        SELECT @InvoiceLineID = NEXT VALUE FOR Repl.seq_InvoiceLines;
 
         INSERT INTO syn_LineasFactura (
-            InvoiceLineID,
-            InvoiceID,
-            StockItemID,
-            [Description],
-            PackageTypeID,
-            Quantity,
-            UnitPrice,
-            TaxRate,
-            TaxAmount,
-            LineProfit,
-            ExtendedPrice,
-            LastEditedBy
-        )
-        VALUES (
+            BranchID, InvoiceLineID, InvoiceID, StockItemID, [Description], PackageTypeID, Quantity, UnitPrice, TaxRate, TaxAmount, LineProfit, ExtendedPrice, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
             @InvoiceLineID,
             @InvoiceID,
             @StockItemID,
@@ -330,7 +390,7 @@ sistema. Rechaza cambios de cliente o fecha si ya existen transacciones
 contables o de inventario asociadas a la factura.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ModificarEncabezadoVenta
+CREATE OR ALTER PROCEDURE dbo.ModificarEncabezadoVenta
     @InvoiceID INT,
     @CustomerID INT = NULL,
     @BillToCustomerID INT = NULL,
@@ -341,20 +401,47 @@ CREATE OR ALTER PROCEDURE ModificarEncabezadoVenta
     @PackedByPersonID INT = NULL,
     @InvoiceDate DATE = NULL,
     @CustomerPurchaseOrderNumber NVARCHAR(20) = NULL,
-    @DeliveryInstructions NVARCHAR(MAX) = NULL
+    @DeliveryInstructions NVARCHAR(MAX) = NULL,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, (SELECT BranchID FROM syn_Facturas WHERE InvoiceID = @InvoiceID));
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[ModificarEncabezadoVenta] @InvoiceID = @InvoiceID, @CustomerID = @CustomerID, @BillToCustomerID = @BillToCustomerID, @DeliveryMethodID = @DeliveryMethodID, @ContactPersonID = @ContactPersonID, @AccountsPersonID = @AccountsPersonID, @SalespersonPersonID = @SalespersonPersonID, @PackedByPersonID = @PackedByPersonID, @InvoiceDate = @InvoiceDate, @CustomerPurchaseOrderNumber = @CustomerPurchaseOrderNumber, @DeliveryInstructions = @DeliveryInstructions;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[ModificarEncabezadoVenta] @InvoiceID = @InvoiceID, @CustomerID = @CustomerID, @BillToCustomerID = @BillToCustomerID, @DeliveryMethodID = @DeliveryMethodID, @ContactPersonID = @ContactPersonID, @AccountsPersonID = @AccountsPersonID, @SalespersonPersonID = @SalespersonPersonID, @PackedByPersonID = @PackedByPersonID, @InvoiceDate = @InvoiceDate, @CustomerPurchaseOrderNumber = @CustomerPurchaseOrderNumber, @DeliveryInstructions = @DeliveryInstructions;
+        RETURN;
+    END;
+
     SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     -- Para que no se pueda eliminar la factura mientras se modifica el encabezado, especialmente al verificar que la factura existe
 
     BEGIN TRY
         BEGIN TRANSACTION;
+        IF (@CustomerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Clientes WHERE CustomerID = @CustomerID)) OR
+           (@BillToCustomerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Clientes WHERE CustomerID = @BillToCustomerID)) OR
+           (@DeliveryMethodID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_MetodosEntrega WHERE DeliveryMethodID = @DeliveryMethodID)) OR
+           (@ContactPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @ContactPersonID)) OR
+           (@AccountsPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @AccountsPersonID)) OR
+           (@SalespersonPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @SalespersonPersonID)) OR
+           (@PackedByPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM syn_Personas WHERE PersonID = @PackedByPersonID))
+            THROW 50050, 'El cliente, metodo de entrega o persona indicada no existe.', 1;
+
 
         IF NOT EXISTS ( -- Si no existe la factura, se lanza un error
             SELECT 1
             FROM syn_Facturas
-            WHERE InvoiceID = @InvoiceID
+            WHERE BranchID = dbo.fn_BranchIDLocal() AND InvoiceID = @InvoiceID
         )
         BEGIN
             ;THROW 50011, 'No existe la factura indicada.', 1;
@@ -363,7 +450,7 @@ BEGIN
         IF EXISTS ( -- Si la factura está asociada a otras tablas, no se permite cambiar cliente ni fecha
             SELECT 1
             FROM syn_Facturas AS i
-            WHERE i.InvoiceID = @InvoiceID
+            WHERE i.BranchID = dbo.fn_BranchIDLocal() AND i.InvoiceID = @InvoiceID
                 AND ( -- Se verifica si se intenta cambiar el cliente o la fecha
                     i.CustomerID <> ISNULL(@CustomerID, i.CustomerID)
                     OR i.InvoiceDate <> ISNULL(@InvoiceDate, i.InvoiceDate)
@@ -372,12 +459,12 @@ BEGIN
                     EXISTS (
                         SELECT 1
                         FROM syn_TransaccionesCliente AS ct
-                        WHERE ct.InvoiceID = i.InvoiceID
+                        WHERE ct.InvoiceID = i.InvoiceID AND ct.BranchID = i.BranchID
                     )
                     OR EXISTS (
                         SELECT 1
                         FROM syn_TransaccionesInventario AS sit
-                        WHERE sit.InvoiceID = i.InvoiceID
+                        WHERE sit.InvoiceID = i.InvoiceID AND sit.BranchID = i.BranchID
                     )
                 )
         )
@@ -402,7 +489,7 @@ BEGIN
                 LTRIM(RTRIM(@DeliveryInstructions)),
                 DeliveryInstructions
             )
-        WHERE InvoiceID = @InvoiceID;
+        WHERE BranchID = dbo.fn_BranchIDLocal() AND InvoiceID = @InvoiceID;
 
         COMMIT TRANSACTION;
         SELECT @InvoiceID AS NumeroFactura;
@@ -425,17 +512,35 @@ Los importes derivados y la descripción se recalculan. La escritura se limita
 a Sales.InvoiceLines.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ModificarLineaVenta
+CREATE OR ALTER PROCEDURE dbo.ModificarLineaVenta
     @InvoiceLineID INT,
     @InvoiceIDEsperado INT,
     @StockItemID INT = NULL,
     @PackageTypeID INT = NULL,
     @Cantidad INT = NULL,
     @PrecioUnitario DECIMAL(18, 2) = NULL,
-    @ImpuestoAplicado DECIMAL(18, 3) = NULL
+    @ImpuestoAplicado DECIMAL(18, 3) = NULL,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, (SELECT BranchID FROM syn_LineasFactura WHERE InvoiceLineID = @InvoiceLineID));
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[ModificarLineaVenta] @InvoiceLineID = @InvoiceLineID, @InvoiceIDEsperado = @InvoiceIDEsperado, @StockItemID = @StockItemID, @PackageTypeID = @PackageTypeID, @Cantidad = @Cantidad, @PrecioUnitario = @PrecioUnitario, @ImpuestoAplicado = @ImpuestoAplicado;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[ModificarLineaVenta] @InvoiceLineID = @InvoiceLineID, @InvoiceIDEsperado = @InvoiceIDEsperado, @StockItemID = @StockItemID, @PackageTypeID = @PackageTypeID, @Cantidad = @Cantidad, @PrecioUnitario = @PrecioUnitario, @ImpuestoAplicado = @ImpuestoAplicado;
+        RETURN;
+    END;
+
     SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     -- Para que no se pueda eliminar la factura mientras se modifica la línea, especialmente al verificar que la factura existe
 
@@ -468,7 +573,7 @@ BEGIN
             @PrecioUnitarioActual = UnitPrice,
             @ImpuestoAplicadoActual = TaxRate
         FROM syn_LineasFactura
-        WHERE InvoiceLineID = @InvoiceLineID;
+        WHERE BranchID = dbo.fn_BranchIDLocal() AND InvoiceLineID = @InvoiceLineID;
 
         IF @InvoiceID IS NULL
         BEGIN
@@ -493,13 +598,19 @@ BEGIN
             @UltimoCosto = sih.LastCostPrice
         FROM syn_Productos AS si
         INNER JOIN syn_Inventario AS sih
-            ON si.StockItemID = sih.StockItemID
+            ON si.StockItemID = sih.StockItemID AND sih.BranchID = dbo.fn_BranchIDLocal()
         WHERE si.StockItemID = @StockItemIDFinal;
 
         IF @Descripcion IS NULL OR @UltimoCosto IS NULL
         BEGIN
             ;THROW 50012, 'No existe el producto o no tiene un costo de inventario disponible.', 1;
         END;
+
+        IF @CantidadFinal <= 0 OR @PrecioUnitarioFinal < 0 OR @ImpuestoAplicadoFinal < 0
+            THROW 50047, 'Cantidad, precio o impuesto de la linea no valido.', 1;
+
+        IF NOT EXISTS (SELECT 1 FROM syn_TiposEmpaque WHERE PackageTypeID = @PackageTypeIDFinal)
+            THROW 50051, 'El tipo de empaque indicado no existe.', 1;
 
         SET @MontoImpuesto =
             @CantidadFinal * ISNULL(@PrecioUnitarioFinal, 0)
@@ -521,7 +632,7 @@ BEGIN
             ExtendedPrice = @PrecioExtendido,
             LastEditedBy = 1,
             LastEditedWhen = SYSDATETIME()
-        WHERE InvoiceLineID = @InvoiceLineID;
+        WHERE BranchID = dbo.fn_BranchIDLocal() AND InvoiceLineID = @InvoiceLineID;
 
         COMMIT TRANSACTION;
         SELECT

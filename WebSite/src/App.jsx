@@ -1,10 +1,18 @@
 import { useState } from "react";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import ModalConfirmacion from "./components/ModalConfirmacion";
-import { Box, Button, CircularProgress, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  CircularProgress,
+  IconButton,
+  Popover,
+  Typography,
+} from "@mui/material";
 import Proveedores from "./pages/proveedores/Proveedores";
 import Clientes from "./pages/clientes/Clientes";
 import Inventario from "./pages/inventario/Inventario";
@@ -22,11 +30,14 @@ import "./App.css";
  */
 function App() {
   const [interfazActual, setInterfazActual] = useState("inicio");
+  const [puedeVerReportes, setPuedeVerReportes] = useState(false);
   const [moduloActual, setModuloActual] = useState(null);
   const [errorNotificacion, setErrorNotificacion] = useState("");
   const [errorOcultarInterfaz, setErrorOcultarInterfaz] = useState("");
   const [verificandoConexion, setVerificandoConexion] = useState(false);
   const [confirmarCierreSesion, setConfirmarCierreSesion] = useState(false);
+  const [infoServidorActual, setInfoServidorActual] = useState(null);
+  const [anclaInfoServidor, setAnclaInfoServidor] = useState(null);
 
   /** Vuelve a la portada y limpia el estado de la interfaz activa.
    * @returns {void} Restablece la navegación y los errores.
@@ -34,11 +45,14 @@ function App() {
    */
   const cerrarSesion = () => {
     borrarTokenSesion();
+    setPuedeVerReportes(false);
     setErrorNotificacion("");
     setErrorOcultarInterfaz("");
     setModuloActual(null);
     setInterfazActual("inicio");
     setConfirmarCierreSesion(false);
+    setInfoServidorActual(null);
+    setAnclaInfoServidor(null);
   };
 
   /** Dirige al usuario autenticado a su centro y verifica la conexión con la base de datos.
@@ -47,16 +61,19 @@ function App() {
    * @throws {TypeError} Si usuario es null o undefined.
    */
   const ingresarUsuario = async (usuario) => {
+    setPuedeVerReportes(usuario.branchId === 1);
     setErrorNotificacion("");
     setErrorOcultarInterfaz("");
     setModuloActual(null);
+    setInfoServidorActual(null);
     setInterfazActual(
-      usuario.role === "Administrador" ? "gestion" : "reportes",
+      usuario.branchId === 1 && usuario.role !== "Administrador" ? "reportes" : "gestion",
     );
     setVerificandoConexion(true);
 
     try {
-      await verificarConexionBD();
+      const conexion = await verificarConexionBD();
+      setInfoServidorActual(conexion);
     } catch (error) {
       const mensaje = error.message || String(error);
       setErrorOcultarInterfaz(mensaje);
@@ -89,8 +106,10 @@ function App() {
    * @throws {Error} Los errores de conexión se almacenan para mostrarlos en pantalla.
    */
   const abrirContenido = async (destino) => {
+    if (destino === "reportes" && !puedeVerReportes) return;
     setErrorNotificacion("");
     setErrorOcultarInterfaz("");
+    setInfoServidorActual(null);
     if (destino === "reportes") {
       setInterfazActual("reportes");
       setModuloActual(null);
@@ -101,7 +120,8 @@ function App() {
     setVerificandoConexion(true);
 
     try {
-      await verificarConexionBD();
+      const conexion = await verificarConexionBD();
+      setInfoServidorActual(conexion);
     } catch (error) {
       const mensaje = error.message || String(error);
       setErrorOcultarInterfaz(mensaje);
@@ -122,19 +142,12 @@ function App() {
 
   let contenido;
 
-  if (interfazActual === "inicio") {
-    contenido = (
-      <InicioSesion
-        onIngresarUsuario={ingresarUsuario}
-        onError={setErrorNotificacion}
-      />
-    );
-  } else if (errorOcultarInterfaz) {
+  if (errorOcultarInterfaz) {
     contenido = (
       <section className="pantalla-error-conexion">
         {/* Mensaje y posibles causas del error de conexión. */}
         <div className="cuadro-error-conexion" role="alert">
-          <h1>Error al acceder a la base de datos</h1>
+          <h1>Error de conexión con la API o la base de datos</h1>
           <p>Mensaje de error: {errorOcultarInterfaz}</p>
           <div className="causas-error">
             <p><strong>Posibles causas:</strong></p>
@@ -159,15 +172,23 @@ function App() {
             </Button>
           )}
           <Button
-            className="boton-cerrar-sesion"
-            onClick={solicitarCierreSesion}
+            className="boton-volver"
+            onClick={cerrarSesion}
             variant="outlined"
-            startIcon={<LogoutIcon className="icono-cerrar-sesion" />}
+            startIcon={<ArrowBackIcon />}
           >
-            Cerrar sesión
+            Volver al inicio de sesión
           </Button>
         </div>
       </section>
+    );
+  } else if (interfazActual === "inicio") {
+    contenido = (
+      <InicioSesion
+        onIngresarUsuario={ingresarUsuario}
+        onError={setErrorNotificacion}
+        onErrorOcultarInterfaz={ocultarInterfazPorError}
+      />
     );
   } else {
     let contenidoActivo;
@@ -198,17 +219,17 @@ function App() {
       contenidoActivo = (
         <CentroGestion onSeleccionarModulo={abrirContenido} />
       );
-    } else if (interfazActual === "reportes") {
+    } else if (interfazActual === "reportes" && puedeVerReportes) {
       contenidoActivo = (
         <CentroReportes
           onErrorNotificacion={setErrorNotificacion}
-          onErrorOcultarModulo={ocultarInterfazPorError}
+          onErrorOcultarInterfaz={ocultarInterfazPorError}
         />
       );
     } else {
       const propiedadesModulo = {
         onErrorNotificacion: setErrorNotificacion,
-        onErrorOcultarModulo: ocultarInterfazPorError,
+        onErrorOcultarInterfaz: ocultarInterfazPorError,
         onVolverCentroGestion: volverCentroGestion,
       };
 
@@ -225,8 +246,36 @@ function App() {
 
     contenido = (
       <section className="contenido-modulo">
-        {/* Acción para cerrar la sesión desde la interfaz activa. */}
+        {/* Información del servidor y acción para cerrar la sesión. */}
         <div className="acciones-navegacion-interfaz">
+          <IconButton
+            aria-label="Información del servidor actual"
+            className="boton-info-servidor"
+            disabled={!infoServidorActual}
+            onClick={(event) => setAnclaInfoServidor(event.currentTarget)}
+            size="small"
+          >
+            <InfoOutlinedIcon />
+          </IconButton>
+          <Popover
+            anchorEl={anclaInfoServidor}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            onClose={() => setAnclaInfoServidor(null)}
+            open={Boolean(anclaInfoServidor)}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <Box className="info-servidor-popover">
+              <Typography component="p" variant="subtitle2">
+                Servidor actual
+              </Typography>
+              <Typography component="p" variant="body2">
+                {infoServidorActual?.servidor}
+              </Typography>
+              <Typography component="p" variant="caption">
+                Base de datos: {infoServidorActual?.baseDatos}
+              </Typography>
+            </Box>
+          </Popover>
           <Button
             className="boton-cerrar-sesion"
             onClick={solicitarCierreSesion}

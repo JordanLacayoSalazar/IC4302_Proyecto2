@@ -2,7 +2,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
-const { autenticarSesion } = require("./autenticacion");
+const { autenticarSesion, autorizarReportesCorporativos } = require("./autenticacion");
 const { PUERTO_API_PREDETERMINADO } = require("./constants");
 const { iniciarSesion } = require("./controllers/controllerInicioSesion.js");
 
@@ -86,6 +86,7 @@ app.post("/api/auth/login", iniciarSesion);
 
 // Verifica que el usuario tenga una sesión activa antes de permitir el acceso a cualquier ruta de /api
 app.use("/api", autenticarSesion);
+app.use("/api/reportes", autorizarReportesCorporativos);
 
 // Opciones de catálogos.
 app.get("/api/opciones/clientes", getOpcionesClientes);

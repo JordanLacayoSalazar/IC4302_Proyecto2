@@ -1,5 +1,61 @@
-USE WideWorldImporters;
+-- Ejecutar conectado a cada base WWI; no usar la base original WideWorldImporters.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_WARNINGS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
 GO
+IF DB_NAME() NOT IN (N'WWI_Corporativo', N'WWI_SanJose', N'WWI_Limon')
+    THROW 50040, 'Conectese a WWI_Corporativo, WWI_SanJose o WWI_Limon.', 1;
+GO
+
+
+/*
+Los reportes solo se consultan en WWI_Corporativo, usando las replicas locales.
+*/
+CREATE OR ALTER FUNCTION dbo.fn_ReporteFacturas(@BranchID INT)
+RETURNS TABLE
+AS RETURN (
+    SELECT * FROM Sales.Invoices
+    WHERE (@BranchID IS NULL OR BranchID = @BranchID)
+      AND DB_NAME() = N'WWI_Corporativo'
+);
+GO
+CREATE OR ALTER FUNCTION dbo.fn_ReporteLineasFactura(@BranchID INT)
+RETURNS TABLE
+AS RETURN (
+    SELECT * FROM Sales.InvoiceLines
+    WHERE (@BranchID IS NULL OR BranchID = @BranchID)
+      AND DB_NAME() = N'WWI_Corporativo'
+);
+GO
+CREATE OR ALTER FUNCTION dbo.fn_ReporteOrdenesCompra(@BranchID INT)
+RETURNS TABLE
+AS RETURN (
+    SELECT * FROM Purchasing.PurchaseOrders
+    WHERE (@BranchID IS NULL OR BranchID = @BranchID)
+      AND DB_NAME() = N'WWI_Corporativo'
+);
+GO
+CREATE OR ALTER FUNCTION dbo.fn_ReporteLineasOrdenCompra(@BranchID INT)
+RETURNS TABLE
+AS RETURN (
+    SELECT * FROM Purchasing.PurchaseOrderLines
+    WHERE (@BranchID IS NULL OR BranchID = @BranchID)
+      AND DB_NAME() = N'WWI_Corporativo'
+);
+GO
+CREATE OR ALTER FUNCTION dbo.fn_ReporteInventario(@BranchID INT)
+RETURNS TABLE
+AS RETURN (
+    SELECT * FROM Warehouse.StockItemHoldings
+    WHERE (@BranchID IS NULL OR BranchID = @BranchID)
+      AND DB_NAME() = N'WWI_Corporativo'
+);
+GO
+
 
 /*
 Lista de códigos de errores:
@@ -19,27 +75,35 @@ Lista de códigos de errores:
 -- Parámetros : @Proveedor, @Categoria
 -- Requisitos : MAX, MIN, AVG, agrupación y ROLLUP.
 -- ================================================================
-CREATE OR ALTER PROCEDURE ObtenerReporte1
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte1
     @Proveedor NVARCHAR(100) = NULL,
     @Categoria NVARCHAR(50) = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
     WITH ComprasPorOrden AS
     (
         SELECT
-            po.PurchaseOrderID,
+            po.BranchID, po.PurchaseOrderID,
             s.SupplierName,
             sc.SupplierCategoryName,
             SUM(pol.OrderedOuters * pol.ExpectedUnitPricePerOuter) AS MontoOrden
-        FROM syn_OrdenesCompra AS po
-        INNER JOIN syn_LineasOrdenCompra AS pol
-            ON po.PurchaseOrderID = pol.PurchaseOrderID
+        FROM dbo.fn_ReporteOrdenesCompra(@BranchID) AS po
+        INNER JOIN dbo.fn_ReporteLineasOrdenCompra(@BranchID) AS pol
+            ON po.BranchID = pol.BranchID AND po.PurchaseOrderID = pol.PurchaseOrderID
         INNER JOIN syn_Proveedores AS s
             ON po.SupplierID = s.SupplierID
         INNER JOIN syn_CategoriasProveedor AS sc
@@ -55,7 +119,7 @@ BEGIN
                 OR sc.SupplierCategoryName LIKE '%' + LTRIM(RTRIM(@Categoria)) + '%'
             )
         GROUP BY
-            po.PurchaseOrderID,
+            po.BranchID, po.PurchaseOrderID,
             s.SupplierName,
             sc.SupplierCategoryName
     )
@@ -98,24 +162,32 @@ Obtiene el monto más alto, monto más bajo y venta promedio por
 cliente y categoría de cliente. Se puede filtrar por nombre de cliente y categoría.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerReporte2
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte2
     @NombreCliente NVARCHAR(100) = NULL,
     @Categoria NVARCHAR(100) = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
-    -- Se calcula el monto total de cada factura sumando los precios extendidos y los impuestos de sus líneas
+    -- ExtendedPrice ya incluye impuestos; sumar una sola vez por linea y sucursal.
     WITH TotalesFactura AS (
         SELECT
-            il.InvoiceID,
-            SUM(ISNULL(il.ExtendedPrice, 0) + ISNULL(il.TaxAmount, 0)) AS Monto
-        FROM syn_LineasFactura AS il
-        GROUP BY il.InvoiceID
+            il.BranchID, il.InvoiceID,
+            SUM(ISNULL(il.ExtendedPrice, 0)) AS Monto
+        FROM dbo.fn_ReporteLineasFactura(@BranchID) AS il
+        GROUP BY il.BranchID, il.InvoiceID
     )
 
     SELECT
@@ -139,7 +211,7 @@ BEGIN
         MAX(ISNULL(tf.Monto, 0)) AS MontoMasAlto,
         MIN(ISNULL(tf.Monto, 0)) AS MontoMasBajo,
         AVG(CAST(ISNULL(tf.Monto, 0) AS DECIMAL(18, 2))) AS VentaPromedio
-    FROM syn_Facturas AS i
+    FROM dbo.fn_ReporteFacturas(@BranchID) AS i
         
     INNER JOIN syn_Clientes AS c
         ON i.CustomerID = c.CustomerID
@@ -148,7 +220,7 @@ BEGIN
         ON c.CustomerCategoryID = cc.CustomerCategoryID
 
     LEFT JOIN TotalesFactura AS tf
-        ON i.InvoiceID = tf.InvoiceID
+        ON i.BranchID = tf.BranchID AND i.InvoiceID = tf.InvoiceID
 
     WHERE
         (@NombreCliente IS NULL OR c.CustomerName LIKE '%' + LTRIM(RTRIM(@NombreCliente)) + '%')
@@ -167,17 +239,25 @@ GO
 -- Parámetros : @Anio
 -- Requisitos : DENSE_RANK + PARTITION BY + filtro de año.
 -- ================================================================
-CREATE OR ALTER PROCEDURE ObtenerReporte3
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte3
     @Anio INT = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
     IF @Anio IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM syn_Facturas WHERE YEAR(InvoiceDate) = @Anio)
+       AND NOT EXISTS (SELECT 1 FROM dbo.fn_ReporteFacturas(@BranchID) WHERE YEAR(InvoiceDate) = @Anio)
         THROW 50201, 'El año indicado no existe en las facturas de la base de datos.', 1;
 
 
@@ -192,9 +272,9 @@ BEGIN
                 PARTITION BY YEAR(i.InvoiceDate)
                 ORDER BY SUM(il.LineProfit) DESC
             ) AS Ranking
-        FROM syn_Facturas AS i
-        INNER JOIN syn_LineasFactura AS il
-            ON i.InvoiceID = il.InvoiceID
+        FROM dbo.fn_ReporteFacturas(@BranchID) AS i
+        INNER JOIN dbo.fn_ReporteLineasFactura(@BranchID) AS il
+            ON i.BranchID = il.BranchID AND i.InvoiceID = il.InvoiceID
         INNER JOIN syn_Productos AS si
             ON il.StockItemID = si.StockItemID
         WHERE @Anio IS NULL OR YEAR(i.InvoiceDate) = @Anio
@@ -222,18 +302,25 @@ GO
 REPORTE 4: Top 5 clientes por cantidad de facturas emitidas por año.
 -- Parámetros : @AnioInicio, @AnioFin
 -- Requisitos : DENSE_RANK + PARTITION BY + filtro de año.
-Devuelve primero los años disponibles para los filtros y después el reporte
-con el monto total facturado por cliente.
+Devuelve el ranking con el monto total facturado por cliente.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerReporte4
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte4
     @AnioInicio INT = NULL,
     @AnioFin INT = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
@@ -247,7 +334,7 @@ BEGIN
         -- Se obtienen los años distintos de facturación que existen
         SELECT DISTINCT -- Para obtener los años distintos de facturación que existen
             DATEPART(YEAR, i.InvoiceDate) AS Anio
-        FROM syn_Facturas AS i
+        FROM dbo.fn_ReporteFacturas(@BranchID) AS i
     )
     SELECT Anio
     INTO #AniosFacturacion -- Se crea una tabla temporal para almacenar los años de facturación
@@ -276,10 +363,10 @@ BEGIN
 
     WITH TotalesFactura AS (
         SELECT
-            il.InvoiceID,
-            SUM(ISNULL(il.ExtendedPrice, 0) + ISNULL(il.TaxAmount, 0)) AS Monto
-        FROM syn_LineasFactura AS il
-        GROUP BY il.InvoiceID
+            il.BranchID, il.InvoiceID,
+            SUM(ISNULL(il.ExtendedPrice, 0)) AS Monto
+        FROM dbo.fn_ReporteLineasFactura(@BranchID) AS il
+        GROUP BY il.BranchID, il.InvoiceID
     ),
 
     -- Se obtiene la cantidad de facturas y el monto total facturado por año y cliente
@@ -290,13 +377,13 @@ BEGIN
             c.CustomerName AS Cliente,
             COUNT(*) AS CantidadFacturas,
             SUM(ISNULL(tf.Monto, 0)) AS MontoTotalFacturado
-        FROM syn_Facturas AS i
+        FROM dbo.fn_ReporteFacturas(@BranchID) AS i
 
         INNER JOIN syn_Clientes AS c
             ON i.CustomerID = c.CustomerID
 
         LEFT JOIN TotalesFactura AS tf
-            ON i.InvoiceID = tf.InvoiceID
+            ON i.BranchID = tf.BranchID AND i.InvoiceID = tf.InvoiceID
 
         WHERE
             (@AnioInicio IS NULL OR DATEPART(YEAR, i.InvoiceDate) >= @AnioInicio)
@@ -349,14 +436,22 @@ Valida que los años del rango existan en los datos de órdenes de compra y
 devuelve el monto total de las órdenes por proveedor.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerReporte5
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte5
     @AnioInicio INT = NULL,
     @AnioFin INT = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
@@ -369,7 +464,7 @@ BEGIN
     WITH AniosOrdenCompra AS (
         SELECT DISTINCT
             DATEPART(YEAR, po.OrderDate) AS Anio
-        FROM syn_OrdenesCompra AS po
+        FROM dbo.fn_ReporteOrdenesCompra(@BranchID) AS po
     )
     SELECT Anio
     INTO #AniosOrdenCompra
@@ -399,10 +494,10 @@ BEGIN
     -- la cantidad de unidades ordenadas en cada línea de la orden
     WITH TotalesOrden AS (
         SELECT
-            pol.PurchaseOrderID,
+            pol.BranchID, pol.PurchaseOrderID,
             SUM(pol.OrderedOuters * ISNULL(pol.ExpectedUnitPricePerOuter, 0)) AS Monto
-        FROM syn_LineasOrdenCompra AS pol
-        GROUP BY pol.PurchaseOrderID
+        FROM dbo.fn_ReporteLineasOrdenCompra(@BranchID) AS pol
+        GROUP BY pol.BranchID, pol.PurchaseOrderID
     ),
 
     -- Se obtiene la cantidad de órdenes y el monto total por año y proveedor
@@ -414,7 +509,7 @@ BEGIN
             sc.SupplierCategoryName AS Categoria,
             COUNT(*) AS CantidadOrdenes,
             SUM(ISNULL(tord.Monto, 0)) AS MontoTotal
-        FROM syn_OrdenesCompra AS po
+        FROM dbo.fn_ReporteOrdenesCompra(@BranchID) AS po
 
         INNER JOIN syn_Proveedores AS s
             ON po.SupplierID = s.SupplierID
@@ -423,7 +518,7 @@ BEGIN
             ON s.SupplierCategoryID = sc.SupplierCategoryID
 
         LEFT JOIN TotalesOrden AS tord
-            ON po.PurchaseOrderID = tord.PurchaseOrderID
+            ON po.BranchID = tord.BranchID AND po.PurchaseOrderID = tord.PurchaseOrderID
 
         WHERE
             (@AnioInicio IS NULL OR DATEPART(YEAR, po.OrderDate) >= @AnioInicio)
@@ -475,14 +570,22 @@ GO
 -- Parámetros : ninguno
 -- Requisitos : resumen tipo matriz por categorías y años vendidos.
 -- ================================================================
-CREATE OR ALTER PROCEDURE ObtenerReporte6
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte6
     @AnioInicio INT = NULL,
     @AnioFin INT = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @ColumnasPivot NVARCHAR(MAX);
     DECLARE @ColumnasSelect NVARCHAR(MAX);
@@ -490,7 +593,7 @@ BEGIN
 
     SELECT @ColumnasPivot = STUFF((
         SELECT ', ' + QUOTENAME(CAST(YEAR(InvoiceDate) AS NVARCHAR(4)))
-        FROM syn_Facturas
+        FROM dbo.fn_ReporteFacturas(@BranchID)
         WHERE InvoiceDate IS NOT NULL
           AND (@AnioInicio IS NULL OR YEAR(InvoiceDate) >= @AnioInicio)
           AND (@AnioFin IS NULL OR YEAR(InvoiceDate) <= @AnioFin)
@@ -500,7 +603,7 @@ BEGIN
 
     SELECT @ColumnasSelect = STUFF((
         SELECT ', ISNULL(' + QUOTENAME(CAST(YEAR(InvoiceDate) AS NVARCHAR(4))) + ', 0) AS [Ventas_' + CAST(YEAR(InvoiceDate) AS NVARCHAR(4)) + ']'
-        FROM syn_Facturas
+        FROM dbo.fn_ReporteFacturas(@BranchID)
         WHERE InvoiceDate IS NOT NULL
           AND (@AnioInicio IS NULL OR YEAR(InvoiceDate) >= @AnioInicio)
           AND (@AnioFin IS NULL OR YEAR(InvoiceDate) <= @AnioFin)
@@ -517,9 +620,9 @@ BEGIN
             SELECT
                 sg.StockGroupName AS Categoria,
                 YEAR(i.InvoiceDate) AS Anio,
-                il.ExtendedPrice + il.TaxAmount AS Monto
-            FROM syn_Facturas AS i
-            INNER JOIN syn_LineasFactura AS il ON i.InvoiceID = il.InvoiceID
+                ISNULL(il.ExtendedPrice, 0) AS Monto
+            FROM dbo.fn_ReporteFacturas(@BranchID) AS i
+            INNER JOIN dbo.fn_ReporteLineasFactura(@BranchID) AS il ON i.BranchID = il.BranchID AND i.InvoiceID = il.InvoiceID
             INNER JOIN syn_ProductoGrupos AS pig ON il.StockItemID = pig.StockItemID
             INNER JOIN syn_GruposProducto AS sg ON pig.StockGroupID = sg.StockGroupID
             WHERE i.InvoiceDate IS NOT NULL
@@ -538,8 +641,8 @@ BEGIN
         ';
 
         EXEC sp_executesql @SQL, 
-            N'@AnioInicio INT, @AnioFin INT, @Pagina INT, @FilasPorPagina INT', 
-            @AnioInicio, @AnioFin, @Pagina, @FilasPorPagina;
+            N'@AnioInicio INT, @AnioFin INT, @Pagina INT, @FilasPorPagina INT, @BranchID INT',
+            @AnioInicio, @AnioFin, @Pagina, @FilasPorPagina, @BranchID;
     END
     ELSE
     BEGIN
@@ -556,16 +659,24 @@ REPORTE 7: Seguimiento mensual de ventas por cliente.
 -- Requisitos : filtros por año, mes, categoría y subcategoría de producto.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerReporte7
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte7
     @Anio INT = NULL,
     @Mes INT = NULL,
     @CategoriaProducto NVARCHAR(50) = NULL,
     @SubcategoriaProducto NVARCHAR(100) = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
@@ -583,17 +694,17 @@ BEGIN
         DATEPART(MONTH, i.InvoiceDate) AS Mes,
         MIN(i.InvoiceDate) AS PrimeraFacturaDelMes,
         MAX(i.InvoiceDate) AS UltimaFacturaDelMes,
-        SUM(ISNULL(il.ExtendedPrice, 0) + ISNULL(il.TaxAmount, 0)) AS MontoTotalComprado,
+        SUM(ISNULL(il.ExtendedPrice, 0)) AS MontoTotalComprado,
         SUM(il.Quantity) AS CantidadTotal,
         MIN(il.Quantity) AS CantidadMinima,
         MAX(il.Quantity) AS CantidadMaxima
-    FROM syn_Facturas AS i
+    FROM dbo.fn_ReporteFacturas(@BranchID) AS i
         
     INNER JOIN syn_Clientes AS c
         ON i.CustomerID = c.CustomerID
 
-    INNER JOIN syn_LineasFactura AS il
-        ON i.InvoiceID = il.InvoiceID
+    INNER JOIN dbo.fn_ReporteLineasFactura(@BranchID) AS il
+        ON i.BranchID = il.BranchID AND i.InvoiceID = il.InvoiceID
 
     INNER JOIN syn_Productos AS si
         ON il.StockItemID = si.StockItemID
@@ -635,20 +746,28 @@ GO
 -- REPORTE 8: seguimiento mensual de compras a proveedores
 -- Parámetros : @Anio, @Mes, @CategoriaProducto, @SubcategoriaProducto
 -- ================================================================
-CREATE OR ALTER PROCEDURE ObtenerReporte8
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte8
     @Anio INT = NULL,
     @Mes INT = NULL,
     @CategoriaProducto NVARCHAR(50) = NULL,
     @SubcategoriaProducto NVARCHAR(100) = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
     IF @Anio IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM syn_OrdenesCompra WHERE YEAR(OrderDate) = @Anio)
+       AND NOT EXISTS (SELECT 1 FROM dbo.fn_ReporteOrdenesCompra(@BranchID) WHERE YEAR(OrderDate) = @Anio)
         THROW 50202, 'El año indicado no existe en las órdenes de compra.', 1;
 
     IF @Mes IS NOT NULL AND (@Mes < 1 OR @Mes > 12)
@@ -664,24 +783,23 @@ BEGIN
         SUM(pol.OrderedOuters) AS CantidadTotal,
         MIN(pol.OrderedOuters) AS CantidadMinima,
         MAX(pol.OrderedOuters) AS CantidadMaxima
-    FROM syn_OrdenesCompra AS po
-    INNER JOIN syn_LineasOrdenCompra AS pol
-        ON po.PurchaseOrderID = pol.PurchaseOrderID
+    FROM dbo.fn_ReporteOrdenesCompra(@BranchID) AS po
+    INNER JOIN dbo.fn_ReporteLineasOrdenCompra(@BranchID) AS pol
+        ON po.BranchID = pol.BranchID AND po.PurchaseOrderID = pol.PurchaseOrderID
     INNER JOIN syn_Proveedores AS s
         ON po.SupplierID = s.SupplierID
     INNER JOIN syn_Productos AS si
         ON pol.StockItemID = si.StockItemID
-    INNER JOIN syn_ProductoGrupos AS pig
-        ON si.StockItemID = pig.StockItemID
-    INNER JOIN syn_GruposProducto AS sg
-        ON pig.StockGroupID = sg.StockGroupID
     WHERE
         (@Anio IS NULL OR YEAR(po.OrderDate) = @Anio)
         AND (@Mes IS NULL OR MONTH(po.OrderDate) = @Mes)
         AND
         (
             NULLIF(LTRIM(RTRIM(@CategoriaProducto)), '') IS NULL
-            OR sg.StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%'
+            OR EXISTS (SELECT 1 FROM syn_ProductoGrupos AS pig
+                       INNER JOIN syn_GruposProducto AS sg ON sg.StockGroupID = pig.StockGroupID
+                       WHERE pig.StockItemID = si.StockItemID
+                         AND sg.StockGroupName LIKE '%' + LTRIM(RTRIM(@CategoriaProducto)) + '%')
         )
         AND
         (
@@ -706,15 +824,23 @@ GO
 --              que el indicador usa inventario actual frente a unidades
 --              vendidas del año seleccionado como métrica de rotación.
 -- ================================================================
-CREATE OR ALTER PROCEDURE ObtenerReporte9
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte9
     @CategoriaProducto NVARCHAR(50) = NULL,
     @Anio INT = NULL,
     @Proveedor NVARCHAR(100) = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
     WITH VentasPorProducto AS
@@ -722,9 +848,9 @@ BEGIN
         SELECT 
             il.StockItemID,
             SUM(il.Quantity) AS TotalVendido
-        FROM syn_Facturas AS i
-        INNER JOIN syn_LineasFactura AS il ON i.InvoiceID = il.InvoiceID
-        WHERE (@Anio IS NULL OR YEAR(i.InvoiceDate) = @Anio)
+        FROM dbo.fn_ReporteFacturas(@BranchID) AS i
+        INNER JOIN dbo.fn_ReporteLineasFactura(@BranchID) AS il ON i.BranchID = il.BranchID AND i.InvoiceID = il.InvoiceID
+        WHERE YEAR(i.InvoiceDate) = COALESCE(@Anio, YEAR(GETDATE()))
         GROUP BY il.StockItemID
     )
     SELECT
@@ -744,7 +870,11 @@ BEGIN
     FROM VentasPorProducto AS v 
     INNER JOIN syn_Productos AS si ON v.StockItemID = si.StockItemID
     INNER JOIN syn_Proveedores AS s ON si.SupplierID = s.SupplierID
-    LEFT JOIN syn_Inventario AS holdings ON si.StockItemID = holdings.StockItemID
+    OUTER APPLY (
+        SELECT SUM(CONVERT(BIGINT, h.QuantityOnHand)) AS QuantityOnHand
+        FROM dbo.fn_ReporteInventario(@BranchID) AS h
+        WHERE h.StockItemID = si.StockItemID
+    ) AS holdings
     OUTER APPLY
     (
         SELECT TOP (1) sg.StockGroupName
@@ -770,17 +900,25 @@ REPORTE 10: Métodos de entrega más utilizados por destino.
 -- Requisitos : DENSE_RANK + PARTITION BY + filtros por año, mes, categoría de cliente, categoría de producto y producto.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerReporte10
+CREATE OR ALTER PROCEDURE dbo.ObtenerReporte10
     @Anio INT = NULL,
     @Mes INT = NULL,
     @CategoriaClienteID INT = NULL,
     @CategoriaProductoID INT = NULL,
     @ProductoID INT = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF DB_NAME() <> N'WWI_Corporativo'
+        THROW 50206, 'Los reportes solo estan disponibles en el nodo Corporativo.', 1;
+    IF @BranchID IS NOT NULL AND @BranchID NOT IN (1, 2, 3)
+        THROW 50205, 'La sucursal indicada no es valida.', 1;
+    IF @Pagina IS NULL OR @Pagina < 0 OR @FilasPorPagina IS NULL OR @FilasPorPagina < 1
+        THROW 50207, 'La pagina y la cantidad de filas no son validas.', 1;
+
 
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
@@ -790,11 +928,11 @@ BEGIN
         SELECT
             cty.CityName AS LugarDestino,
             dm.DeliveryMethodName AS MetodoEnvio,
-            COUNT(DISTINCT i.InvoiceID) AS CantidadVentas
+            COUNT(DISTINCT CONCAT(i.BranchID, ':', i.InvoiceID)) AS CantidadVentas
             -- Se hace DISTINCT para contar cada factura una sola vez, aunque tenga varias líneas de productos,
             -- debido a que se hace un JOIN con Sales.InvoiceLines
 
-        FROM syn_Facturas AS i
+        FROM dbo.fn_ReporteFacturas(@BranchID) AS i
 
         INNER JOIN syn_Clientes AS c
             ON i.CustomerID = c.CustomerID
@@ -805,8 +943,8 @@ BEGIN
         INNER JOIN syn_MetodosEntrega AS dm
             ON i.DeliveryMethodID = dm.DeliveryMethodID
 
-        INNER JOIN syn_LineasFactura AS il
-            ON i.InvoiceID = il.InvoiceID
+        INNER JOIN dbo.fn_ReporteLineasFactura(@BranchID) AS il
+            ON i.BranchID = il.BranchID AND i.InvoiceID = il.InvoiceID
 
         INNER JOIN syn_Productos AS si
             ON il.StockItemID = si.StockItemID

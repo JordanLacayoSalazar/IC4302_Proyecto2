@@ -1,5 +1,16 @@
-USE WideWorldImporters;
+-- Ejecutar conectado a cada base WWI; no usar la base original WideWorldImporters.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_WARNINGS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
 GO
+IF DB_NAME() NOT IN (N'WWI_Corporativo', N'WWI_SanJose', N'WWI_Limon')
+    THROW 50040, 'Conectese a WWI_Corporativo, WWI_SanJose o WWI_Limon.', 1;
+GO
+
 
 /*
 Lista de códigos de errores:
@@ -24,14 +35,16 @@ Lista de códigos de errores:
   Obtiene productos, grupo principal y existencias, con filtros y paginación.
 ============================================
 */
-CREATE OR ALTER PROCEDURE ObtenerProductos
+CREATE OR ALTER PROCEDURE dbo.ObtenerProductos
     @NombreBusqueda NVARCHAR(100) = NULL,
     @GrupoID INT = NULL,
     @Pagina INT = 0,
-    @FilasPorPagina INT = 10
+    @FilasPorPagina INT = 10,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
     DECLARE @FilasConIndicador INT = @FilasPorPagina + 1;
 
     SELECT si.StockItemID AS ProductoID,
@@ -47,7 +60,16 @@ BEGIN
         WHERE pig.StockItemID = si.StockItemID
         ORDER BY sg.StockGroupName ASC
     ) AS grupo
-    LEFT JOIN syn_Inventario AS holdings ON holdings.StockItemID = si.StockItemID
+    OUTER APPLY (
+        SELECT SUM(h.QuantityOnHand) AS QuantityOnHand,
+               MAX(h.ReorderLevel) AS ReorderLevel,
+               MAX(h.TargetStockLevel) AS TargetStockLevel,
+               CASE WHEN COUNT(*) = 1 THEN MAX(h.BinLocation) END AS BinLocation
+        FROM syn_Inventario AS h
+        WHERE h.StockItemID = si.StockItemID
+          AND (@BranchID IS NULL OR h.BranchID = @BranchID)
+          AND (dbo.fn_BranchIDLocal() = 1 OR h.BranchID = dbo.fn_BranchIDLocal())
+    ) AS holdings
     WHERE (NULLIF(LTRIM(RTRIM(@NombreBusqueda)), '') IS NULL
            OR si.StockItemName LIKE '%' + LTRIM(RTRIM(@NombreBusqueda)) + '%')
       AND (@GrupoID IS NULL OR grupo.StockGroupID = @GrupoID)
@@ -57,11 +79,13 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE ObtenerDetalleProducto
-    @ProductoID INT
+CREATE OR ALTER PROCEDURE dbo.ObtenerDetalleProducto
+    @ProductoID INT,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
     SELECT si.StockItemID AS ProductoID,
            si.StockItemName AS NombreProducto,
            proveedor.SupplierName AS Proveedor,
@@ -86,7 +110,16 @@ BEGIN
     LEFT JOIN syn_Colores AS color ON color.ColorID = si.ColorID
     LEFT JOIN syn_TiposEmpaque AS unitPackage ON unitPackage.PackageTypeID = si.UnitPackageID
     LEFT JOIN syn_TiposEmpaque AS outerPackage ON outerPackage.PackageTypeID = si.OuterPackageID
-    LEFT JOIN syn_Inventario AS holdings ON holdings.StockItemID = si.StockItemID
+    OUTER APPLY (
+        SELECT SUM(h.QuantityOnHand) AS QuantityOnHand,
+               MAX(h.ReorderLevel) AS ReorderLevel,
+               MAX(h.TargetStockLevel) AS TargetStockLevel,
+               CASE WHEN COUNT(*) = 1 THEN MAX(h.BinLocation) END AS BinLocation
+        FROM syn_Inventario AS h
+        WHERE h.StockItemID = si.StockItemID
+          AND (@BranchID IS NULL OR h.BranchID = @BranchID)
+          AND (dbo.fn_BranchIDLocal() = 1 OR h.BranchID = dbo.fn_BranchIDLocal())
+    ) AS holdings
     OUTER APPLY (
         SELECT TOP (1) sg.StockGroupName
         FROM syn_ProductoGrupos AS pig
@@ -98,10 +131,11 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE ObtenerGruposProducto
+CREATE OR ALTER PROCEDURE dbo.ObtenerGruposProducto
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
     SELECT StockGroupID AS GrupoID, StockGroupName AS NombreGrupo
     FROM syn_GruposProducto
     ORDER BY StockGroupName ASC;
@@ -115,7 +149,7 @@ GO
 -- Retorno    : StockItemID del producto creado
 -- Descripción: Crea un prodcuto 
 -- ================================================================
-CREATE OR ALTER PROCEDURE CrearProducto
+CREATE OR ALTER PROCEDURE dbo.CrearProducto
     @NombreProducto NVARCHAR(100),
     @NombreGrupo NVARCHAR(50),
     @NombreProveedor NVARCHAR(100),
@@ -132,10 +166,28 @@ CREATE OR ALTER PROCEDURE CrearProducto
     @PrecioUnitario DECIMAL(18,2),
     @PrecioVenta DECIMAL(18,2),
     @Peso DECIMAL(18,3),
-    @PalabrasClaves NVARCHAR(MAX) = NULL
+    @PalabrasClaves NVARCHAR(MAX) = NULL,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, dbo.fn_BranchIDLocal());
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[CrearProducto] @NombreProducto = @NombreProducto, @NombreGrupo = @NombreGrupo, @NombreProveedor = @NombreProveedor, @Color = @Color, @UnidadEmpaque = @UnidadEmpaque, @EmpaqueExterior = @EmpaqueExterior, @CantidadEmpaque = @CantidadEmpaque, @CantidadInventario = @CantidadInventario, @NivelReorden = @NivelReorden, @NivelObjetivo = @NivelObjetivo, @Marca = @Marca, @Talla = @Talla, @Impuesto = @Impuesto, @PrecioUnitario = @PrecioUnitario, @PrecioVenta = @PrecioVenta, @Peso = @Peso, @PalabrasClaves = @PalabrasClaves;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[CrearProducto] @NombreProducto = @NombreProducto, @NombreGrupo = @NombreGrupo, @NombreProveedor = @NombreProveedor, @Color = @Color, @UnidadEmpaque = @UnidadEmpaque, @EmpaqueExterior = @EmpaqueExterior, @CantidadEmpaque = @CantidadEmpaque, @CantidadInventario = @CantidadInventario, @NivelReorden = @NivelReorden, @NivelObjetivo = @NivelObjetivo, @Marca = @Marca, @Talla = @Talla, @Impuesto = @Impuesto, @PrecioUnitario = @PrecioUnitario, @PrecioVenta = @PrecioVenta, @Peso = @Peso, @PalabrasClaves = @PalabrasClaves;
+        RETURN;
+    END;
+
 
     DECLARE
         @GrupoID INT,
@@ -185,12 +237,15 @@ BEGIN
 
         IF @GrupoID IS NULL
         BEGIN
-            INSERT INTO syn_GruposProducto
-                (StockGroupName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@NombreGrupo)), 1);
-
-            SET @GrupoID = SCOPE_IDENTITY();
+            SET @GrupoID = NEXT VALUE FOR Repl.seq_StockGroups;
+        INSERT INTO syn_GruposProducto (
+            BranchID, StockGroupID, StockGroupName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @GrupoID,
+            LTRIM(RTRIM(@NombreGrupo)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -210,12 +265,15 @@ BEGIN
 
             IF @ColorID IS NULL
             BEGIN
-                INSERT INTO syn_Colores
-                    (ColorName, LastEditedBy)
-                VALUES
-                    (LTRIM(RTRIM(@Color)), 1);
-
-                SET @ColorID = SCOPE_IDENTITY();
+                SET @ColorID = NEXT VALUE FOR Repl.seq_Colors;
+        INSERT INTO syn_Colores (
+            BranchID, ColorID, ColorName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @ColorID,
+            LTRIM(RTRIM(@Color)),
+            1
+        );
             END;
         END;
 
@@ -226,12 +284,15 @@ BEGIN
 
         IF @UnitPkgID IS NULL
         BEGIN
-            INSERT INTO syn_TiposEmpaque
-                (PackageTypeName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@UnidadEmpaque)), 1);
-
-            SET @UnitPkgID = SCOPE_IDENTITY();
+            SET @UnitPkgID = NEXT VALUE FOR Repl.seq_PackageTypes;
+        INSERT INTO syn_TiposEmpaque (
+            BranchID, PackageTypeID, PackageTypeName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @UnitPkgID,
+            LTRIM(RTRIM(@UnidadEmpaque)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -241,35 +302,23 @@ BEGIN
 
         IF @OuterPkgID IS NULL
         BEGIN
-            INSERT INTO syn_TiposEmpaque
-                (PackageTypeName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@EmpaqueExterior)), 1);
-
-            SET @OuterPkgID = SCOPE_IDENTITY();
+            SET @OuterPkgID = NEXT VALUE FOR Repl.seq_PackageTypes;
+        INSERT INTO syn_TiposEmpaque (
+            BranchID, PackageTypeID, PackageTypeName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @OuterPkgID,
+            LTRIM(RTRIM(@EmpaqueExterior)),
+            1
+        );
         END;
 
-        INSERT INTO syn_Productos
-        (
-            StockItemName,
-            SupplierID,
-            ColorID,
-            UnitPackageID,
-            OuterPackageID,
-            Brand,
-            Size,
-            LeadTimeDays,
-            QuantityPerOuter,
-            IsChillerStock,
-            TaxRate,
-            UnitPrice,
-            RecommendedRetailPrice,
-            TypicalWeightPerUnit,
-            MarketingComments,
-            LastEditedBy
-        )
-        VALUES
-        (
+        SET @NuevoProductoID = NEXT VALUE FOR Repl.seq_StockItems;
+        INSERT INTO syn_Productos (
+            BranchID, StockItemID, StockItemName, SupplierID, ColorID, UnitPackageID, OuterPackageID, Brand, Size, LeadTimeDays, QuantityPerOuter, IsChillerStock, TaxRate, UnitPrice, RecommendedRetailPrice, TypicalWeightPerUnit, MarketingComments, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @NuevoProductoID,
             LTRIM(RTRIM(@NombreProducto)),
             @ProveedorID,
             @ColorID,
@@ -288,31 +337,24 @@ BEGIN
             1
         );
 
-        SELECT @NuevoProductoID = StockItemID
-        FROM syn_Productos
-        WHERE StockItemName = LTRIM(RTRIM(@NombreProducto));
 
         IF @NuevoProductoID IS NULL
             THROW 50030, 'No se pudo obtener el identificador del producto creado.', 1;
 
-        INSERT INTO syn_ProductoGrupos
-            (StockItemID, StockGroupID, LastEditedBy)
-        VALUES
-            (@NuevoProductoID, @GrupoID, 1);
+        INSERT INTO syn_ProductoGrupos (
+            BranchID, StockItemStockGroupID, StockItemID, StockGroupID, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            NEXT VALUE FOR Repl.seq_StockItemStockGroups,
+            @NuevoProductoID,
+            @GrupoID,
+            1
+        );
 
-        INSERT INTO syn_Inventario
-        (
-            StockItemID,
-            QuantityOnHand,
-            BinLocation,
-            LastStocktakeQuantity,
-            LastCostPrice,
-            ReorderLevel,
-            TargetStockLevel,
-            LastEditedBy
-        )
-        VALUES
-        (
+        INSERT INTO syn_Inventario (
+            BranchID, StockItemID, QuantityOnHand, BinLocation, LastStocktakeQuantity, LastCostPrice, ReorderLevel, TargetStockLevel, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
             @NuevoProductoID,
             @CantidadInventario,
             'N/A',
@@ -342,7 +384,7 @@ GO
 -- Retorno    : mensaje implícito de éxito
 -- Descripción: Actualiza producto
 -- ================================================================
-CREATE OR ALTER PROCEDURE ActualizarProducto
+CREATE OR ALTER PROCEDURE dbo.ActualizarProducto
     @ProductoID INT,
     @NombreProducto NVARCHAR(100),
     @NombreGrupo NVARCHAR(50),
@@ -360,10 +402,28 @@ CREATE OR ALTER PROCEDURE ActualizarProducto
     @PrecioUnitario DECIMAL(18,2),
     @PrecioVenta DECIMAL(18,2),
     @Peso DECIMAL(18,3),
-    @PalabrasClaves NVARCHAR(MAX) = NULL
+    @PalabrasClaves NVARCHAR(MAX) = NULL,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, dbo.fn_BranchIDLocal());
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[ActualizarProducto] @ProductoID = @ProductoID, @NombreProducto = @NombreProducto, @NombreGrupo = @NombreGrupo, @NombreProveedor = @NombreProveedor, @Color = @Color, @UnidadEmpaque = @UnidadEmpaque, @EmpaqueExterior = @EmpaqueExterior, @CantidadEmpaque = @CantidadEmpaque, @CantidadInventario = @CantidadInventario, @NivelReorden = @NivelReorden, @NivelObjetivo = @NivelObjetivo, @Marca = @Marca, @Talla = @Talla, @Impuesto = @Impuesto, @PrecioUnitario = @PrecioUnitario, @PrecioVenta = @PrecioVenta, @Peso = @Peso, @PalabrasClaves = @PalabrasClaves;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[ActualizarProducto] @ProductoID = @ProductoID, @NombreProducto = @NombreProducto, @NombreGrupo = @NombreGrupo, @NombreProveedor = @NombreProveedor, @Color = @Color, @UnidadEmpaque = @UnidadEmpaque, @EmpaqueExterior = @EmpaqueExterior, @CantidadEmpaque = @CantidadEmpaque, @CantidadInventario = @CantidadInventario, @NivelReorden = @NivelReorden, @NivelObjetivo = @NivelObjetivo, @Marca = @Marca, @Talla = @Talla, @Impuesto = @Impuesto, @PrecioUnitario = @PrecioUnitario, @PrecioVenta = @PrecioVenta, @Peso = @Peso, @PalabrasClaves = @PalabrasClaves;
+        RETURN;
+    END;
+
 
     DECLARE
         @GrupoID INT,
@@ -416,12 +476,15 @@ BEGIN
 
         IF @GrupoID IS NULL
         BEGIN
-            INSERT INTO syn_GruposProducto
-                (StockGroupName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@NombreGrupo)), 1);
-
-            SET @GrupoID = SCOPE_IDENTITY();
+            SET @GrupoID = NEXT VALUE FOR Repl.seq_StockGroups;
+        INSERT INTO syn_GruposProducto (
+            BranchID, StockGroupID, StockGroupName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @GrupoID,
+            LTRIM(RTRIM(@NombreGrupo)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -441,12 +504,15 @@ BEGIN
 
             IF @ColorID IS NULL
             BEGIN
-                INSERT INTO syn_Colores
-                    (ColorName, LastEditedBy)
-                VALUES
-                    (LTRIM(RTRIM(@Color)), 1);
-
-                SET @ColorID = SCOPE_IDENTITY();
+                SET @ColorID = NEXT VALUE FOR Repl.seq_Colors;
+        INSERT INTO syn_Colores (
+            BranchID, ColorID, ColorName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @ColorID,
+            LTRIM(RTRIM(@Color)),
+            1
+        );
             END;
         END;
 
@@ -457,12 +523,15 @@ BEGIN
 
         IF @UnitPkgID IS NULL
         BEGIN
-            INSERT INTO syn_TiposEmpaque
-                (PackageTypeName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@UnidadEmpaque)), 1);
-
-            SET @UnitPkgID = SCOPE_IDENTITY();
+            SET @UnitPkgID = NEXT VALUE FOR Repl.seq_PackageTypes;
+        INSERT INTO syn_TiposEmpaque (
+            BranchID, PackageTypeID, PackageTypeName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @UnitPkgID,
+            LTRIM(RTRIM(@UnidadEmpaque)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -472,12 +541,15 @@ BEGIN
 
         IF @OuterPkgID IS NULL
         BEGIN
-            INSERT INTO syn_TiposEmpaque
-                (PackageTypeName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@EmpaqueExterior)), 1);
-
-            SET @OuterPkgID = SCOPE_IDENTITY();
+            SET @OuterPkgID = NEXT VALUE FOR Repl.seq_PackageTypes;
+        INSERT INTO syn_TiposEmpaque (
+            BranchID, PackageTypeID, PackageTypeName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @OuterPkgID,
+            LTRIM(RTRIM(@EmpaqueExterior)),
+            1
+        );
         END;
 
         UPDATE syn_Productos
@@ -501,10 +573,15 @@ BEGIN
         DELETE FROM syn_ProductoGrupos
         WHERE StockItemID = @ProductoID;
 
-        INSERT INTO syn_ProductoGrupos
-            (StockItemID, StockGroupID, LastEditedBy)
-        VALUES
-            (@ProductoID, @GrupoID, 1);
+        INSERT INTO syn_ProductoGrupos (
+            BranchID, StockItemStockGroupID, StockItemID, StockGroupID, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            NEXT VALUE FOR Repl.seq_StockItemStockGroups,
+            @ProductoID,
+            @GrupoID,
+            1
+        );
 
         UPDATE syn_Inventario
         SET
@@ -513,34 +590,25 @@ BEGIN
             ReorderLevel = @NivelReorden,
             TargetStockLevel = @NivelObjetivo,
             LastEditedBy = 1
-        WHERE StockItemID = @ProductoID;
+        WHERE StockItemID = @ProductoID AND BranchID = dbo.fn_BranchIDLocal();
 
         -- @@ROWCOUNT indica cuántas filas actualizó la sentencia anterior.
         -- Si no había una fila de inventario, se inserta una con los nuevos valores.
         IF @@ROWCOUNT = 0
         BEGIN
-            INSERT INTO syn_Inventario
-            (
-                StockItemID,
-                QuantityOnHand,
-                BinLocation,
-                LastStocktakeQuantity,
-                LastCostPrice,
-                ReorderLevel, -- Cantidad a partir de la cual conviene considerar reabastecer el producto
-                TargetStockLevel, -- Cantidad deseada después de reabastecer el producto
-                LastEditedBy
-            )
-            VALUES
-            (
-                @ProductoID,
-                @CantidadInventario,
-                'N/A',
-                @CantidadInventario,
-                @PrecioUnitario,
-                @NivelReorden,
-                @NivelObjetivo,
-                1
-            );
+            INSERT INTO syn_Inventario (
+            BranchID, StockItemID, QuantityOnHand, BinLocation, LastStocktakeQuantity, LastCostPrice, ReorderLevel, TargetStockLevel, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @ProductoID,
+            @CantidadInventario,
+            'N/A',
+            @CantidadInventario,
+            @PrecioUnitario,
+            @NivelReorden,
+            @NivelObjetivo,
+            1
+        );
         END;
 
         COMMIT TRANSACTION;
@@ -560,11 +628,29 @@ GO
 -- Retorno    : ninguno
 -- Descripción: Elimina un producto de la base de datos
 -- ================================================================
-CREATE OR ALTER PROCEDURE EliminarProducto
-    @ProductoID INT
+CREATE OR ALTER PROCEDURE dbo.EliminarProducto
+    @ProductoID INT,
+    @BranchID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @Destino INT = COALESCE(@BranchID, dbo.fn_BranchIDLocal());
+    IF @Destino NOT IN (1, 2, 3) OR @Destino IS NULL
+        THROW 50045, 'La sucursal indicada no es valida o el registro no existe.', 1;
+    IF dbo.fn_BranchIDLocal() <> 1 AND @Destino <> dbo.fn_BranchIDLocal()
+        THROW 50046, 'Opere desde el nodo propietario o desde Corporativo.', 1;
+    IF @Destino <> dbo.fn_BranchIDLocal()
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        IF @Destino = 2
+            EXEC [nodo_sucursal_sj].[WWI_SanJose].[dbo].[EliminarProducto] @ProductoID = @ProductoID;
+        ELSE IF @Destino = 3
+            EXEC [nodo_sucursal_limon].[WWI_Limon].[dbo].[EliminarProducto] @ProductoID = @ProductoID;
+        RETURN;
+    END;
+
 
     IF NOT EXISTS (
         SELECT 1
@@ -573,11 +659,15 @@ BEGIN
     )
         THROW 50009, 'El producto indicado no existe.', 1;
 
+    EXEC dbo.sp_ValidarEliminacionGlobal @Entidad = 'Producto', @ID = @ProductoID, @SucursalInventario = @Destino;
+
     BEGIN TRY
+        SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
         BEGIN TRANSACTION;
+        EXEC dbo.sp_ValidarEliminacionLocal @Entidad = 'Producto', @ID = @ProductoID, @SucursalInventario = @Destino;
 
         DELETE FROM syn_Inventario
-        WHERE StockItemID = @ProductoID;
+        WHERE StockItemID = @ProductoID AND BranchID = dbo.fn_BranchIDLocal();
 
         DELETE FROM syn_ProductoGrupos
         WHERE StockItemID = @ProductoID;

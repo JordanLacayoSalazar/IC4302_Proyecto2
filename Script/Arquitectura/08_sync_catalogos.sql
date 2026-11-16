@@ -15,7 +15,13 @@ GO
 
 IF OBJECT_ID('tempdb..#cfg') IS NOT NULL DROP TABLE #cfg;
 CREATE TABLE #cfg (SAPwd NVARCHAR(128) NOT NULL);
-INSERT #cfg VALUES (N'<<SA_PASSWORD>>');          -- <-- misma contrasena SA de los 3 nodos
+INSERT #cfg VALUES (N'<<SA_PASSWORD>>');          -- <-- escriba la misma contrasena SA de los 3 nodos
+
+IF SCHEMA_ID(N'Repl') IS NULL
+BEGIN
+    EXEC(N'CREATE SCHEMA Repl AUTHORIZATION dbo;');
+END;
+GO
 
 DECLARE @dbn SYSNAME = DB_NAME();
 IF (SELECT SAPwd FROM #cfg) = N'<<SA_PASSWORD>>'

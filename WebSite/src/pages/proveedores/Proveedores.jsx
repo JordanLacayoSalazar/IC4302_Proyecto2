@@ -67,14 +67,14 @@ const FORMULARIO_INICIAL = {
  * Presenta el listado, los filtros y los formularios de proveedores.
  * @param {object} props Propiedades de notificación y control del módulo.
  * @param {Function} props.onErrorNotificacion Muestra errores recuperables.
- * @param {Function} props.onErrorOcultarModulo Oculta el módulo ante errores críticos.
+ * @param {Function} props.onErrorOcultarInterfaz Oculta la interfaz ante errores críticos.
  * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
  * @returns {JSX.Element} Interfaz de gestión de proveedores.
  * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function Proveedores({
   onErrorNotificacion,
-  onErrorOcultarModulo,
+  onErrorOcultarInterfaz,
   onVolverCentroGestion,
 }) {
   const [proveedores, setProveedores] = useState([]);
@@ -118,7 +118,7 @@ export default function Proveedores({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar opciones de proveedores",
       );
     }
@@ -157,7 +157,7 @@ export default function Proveedores({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar proveedores",
       );
     }
@@ -191,7 +191,7 @@ export default function Proveedores({
         mostrarError(
           resultadoProveedores.reason,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar proveedores",
         );
       }
@@ -202,7 +202,7 @@ export default function Proveedores({
         mostrarError(
           resultadoCategorias.reason,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar categorías de proveedores",
         );
       }
@@ -213,7 +213,7 @@ export default function Proveedores({
         mostrarError(
           resultadoOpciones.reason,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar opciones del formulario de proveedores",
         );
       }
@@ -236,7 +236,7 @@ export default function Proveedores({
     return () => {
       activo = false;
     };
-  }, [onErrorNotificacion, onErrorOcultarModulo]);
+  }, [onErrorNotificacion, onErrorOcultarInterfaz]);
 
 
   /**
@@ -270,7 +270,7 @@ export default function Proveedores({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el detalle del proveedor",
       );
     }
@@ -336,7 +336,7 @@ export default function Proveedores({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el proveedor para editar",
       );
     }
@@ -399,7 +399,7 @@ export default function Proveedores({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al guardar el proveedor",
       );
     }
@@ -435,7 +435,7 @@ export default function Proveedores({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al eliminar el proveedor",
       );
     }

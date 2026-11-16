@@ -38,14 +38,14 @@ import ModalConfirmacion from "../../components/ModalConfirmacion";
  * Renderiza el módulo de clientes, su tabla y sus formularios.
  * @param {object} props Manejadores de notificaciones y control del módulo.
  * @param {Function} props.onErrorNotificacion Notifica errores al usuario.
- * @param {Function} props.onErrorOcultarModulo Oculta el módulo si el error lo requiere.
+ * @param {Function} props.onErrorOcultarInterfaz Oculta la interfaz si el error lo requiere.
  * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
  * @returns {JSX.Element} Interfaz de gestión de clientes.
  * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function Clientes({
   onErrorNotificacion,
-  onErrorOcultarModulo,
+  onErrorOcultarInterfaz,
   onVolverCentroGestion,
 }) {
   const [clientes, setClientes] = useState([]);
@@ -101,12 +101,12 @@ export default function Clientes({
         mostrarError(
           error,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar clientes",
         );
       }
     },
-    [cantidadFilasPorPagina, onErrorNotificacion, onErrorOcultarModulo],
+    [cantidadFilasPorPagina, onErrorNotificacion, onErrorOcultarInterfaz],
   );
 
   /**
@@ -122,11 +122,11 @@ export default function Clientes({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar opciones del formulario",
       );
     }
-  }, [onErrorNotificacion, onErrorOcultarModulo]);
+  }, [onErrorNotificacion, onErrorOcultarInterfaz]);
 
   /**
    * Abre el formulario vacío para registrar un cliente nuevo.
@@ -186,7 +186,7 @@ export default function Clientes({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el cliente para editar",
       );
     }
@@ -292,7 +292,7 @@ export default function Clientes({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al guardar cliente",
       );
     }
@@ -318,7 +318,7 @@ export default function Clientes({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al eliminar cliente",
       );
     }
@@ -361,7 +361,7 @@ export default function Clientes({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al obtener detalle del cliente",
       );
     }

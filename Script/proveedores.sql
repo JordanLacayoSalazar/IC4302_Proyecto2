@@ -1,5 +1,16 @@
-USE WideWorldImporters;
+-- Ejecutar conectado a cada base WWI; no usar la base original WideWorldImporters.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_WARNINGS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
 GO
+IF DB_NAME() NOT IN (N'WWI_Corporativo', N'WWI_SanJose', N'WWI_Limon')
+    THROW 50040, 'Conectese a WWI_Corporativo, WWI_SanJose o WWI_Limon.', 1;
+GO
+
 
 /*
 Lista de códigos de errores:
@@ -24,7 +35,7 @@ Lista de códigos de errores:
   Obtiene proveedores y permite filtrar por nombre, categoría y método de entrega.
 ============================================
 */
-CREATE OR ALTER PROCEDURE ObtenerProveedores
+CREATE OR ALTER PROCEDURE dbo.ObtenerProveedores
     @NombreBusqueda NVARCHAR(100) = NULL,
     @CategoriaID INT = NULL,
     @MetodoEntregaID INT = NULL,
@@ -52,11 +63,21 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE ObtenerDetalleProveedor
+CREATE OR ALTER PROCEDURE dbo.ObtenerDetalleProveedor
     @SupplierID INT
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[ObtenerDetalleProveedor]
+                @SupplierID = @SupplierID;
+        RETURN;
+    END;
+
     SELECT p.SupplierID,
            p.SupplierReference AS CodigoProveedor,
            p.SupplierName AS NombreProveedor,
@@ -96,7 +117,7 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE ObtenerCategoriasProveedor
+CREATE OR ALTER PROCEDURE dbo.ObtenerCategoriasProveedor
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -114,7 +135,7 @@ GO
 -- Retorno    : SupplierID creado.
 -- Descripción: Crea un provedor
 -- ================================================================
-CREATE OR ALTER PROCEDURE CrearProveedor
+CREATE OR ALTER PROCEDURE dbo.CrearProveedor
     @SupplierName NVARCHAR(100),
     @SupplierCategoryName NVARCHAR(50),
     @PrimaryContactPersonName NVARCHAR(100),
@@ -139,6 +160,36 @@ CREATE OR ALTER PROCEDURE CrearProveedor
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[CrearProveedor]
+                @SupplierName = @SupplierName,
+                @SupplierCategoryName = @SupplierCategoryName,
+                @PrimaryContactPersonName = @PrimaryContactPersonName,
+                @AlternateContactPersonName = @AlternateContactPersonName,
+                @DeliveryMethodName = @DeliveryMethodName,
+                @CityName = @CityName,
+                @SupplierReference = @SupplierReference,
+                @DeliveryAddressLine1 = @DeliveryAddressLine1,
+                @DeliveryAddressLine2 = @DeliveryAddressLine2,
+                @DeliveryPostalCode = @DeliveryPostalCode,
+                @PostalAddressLine1 = @PostalAddressLine1,
+                @PostalAddressLine2 = @PostalAddressLine2,
+                @PostalPostalCode = @PostalPostalCode,
+                @Latitud = @Latitud,
+                @Longitud = @Longitud,
+                @PhoneNumber = @PhoneNumber,
+                @FaxNumber = @FaxNumber,
+                @WebsiteURL = @WebsiteURL,
+                @BankAccountName = @BankAccountName,
+                @BankAccountNumber = @BankAccountNumber,
+                @PaymentDays = @PaymentDays;
+        RETURN;
+    END;
+
 
     DECLARE
         @CategoryID INT,
@@ -186,12 +237,15 @@ BEGIN
 
         IF @CategoryID IS NULL
         BEGIN
-            INSERT INTO syn_CategoriasProveedor
-                (SupplierCategoryName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@SupplierCategoryName)), 1);
-
-            SET @CategoryID = SCOPE_IDENTITY();
+            SET @CategoryID = NEXT VALUE FOR Repl.seq_SupplierCategories;
+        INSERT INTO syn_CategoriasProveedor (
+            BranchID, SupplierCategoryID, SupplierCategoryName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @CategoryID,
+            LTRIM(RTRIM(@SupplierCategoryName)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -201,12 +255,15 @@ BEGIN
 
         IF @DeliveryMethodID IS NULL
         BEGIN
-            INSERT INTO syn_MetodosEntrega
-                (DeliveryMethodName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@DeliveryMethodName)), 1);
-
-            SET @DeliveryMethodID = SCOPE_IDENTITY();
+            SET @DeliveryMethodID = NEXT VALUE FOR Repl.seq_DeliveryMethods;
+        INSERT INTO syn_MetodosEntrega (
+            BranchID, DeliveryMethodID, DeliveryMethodName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @DeliveryMethodID,
+            LTRIM(RTRIM(@DeliveryMethodName)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -243,51 +300,33 @@ BEGIN
         ELSE
             SET @Location = geography::Point(0, 0, 4326);
 
-        INSERT INTO syn_Proveedores
-        (
-            SupplierName,
-            SupplierCategoryID,
-            PrimaryContactPersonID,
-            AlternateContactPersonID,
-            DeliveryMethodID,
-            DeliveryCityID,
-            PostalCityID,
-            SupplierReference,
-            BankAccountName,
-            BankAccountBranch,
-            BankAccountCode,
-            BankAccountNumber,
-            BankInternationalCode,
-            PaymentDays,
-            InternalComments,
-            PhoneNumber,
-            FaxNumber,
-            WebsiteURL,
-            DeliveryAddressLine1,
-            DeliveryAddressLine2,
-            DeliveryPostalCode,
-            DeliveryLocation,
-            PostalAddressLine1,
-            PostalAddressLine2,
-            PostalPostalCode,
-            LastEditedBy
-        )
-        VALUES
-        (
+        SET @NuevoSupplierID = NEXT VALUE FOR Repl.seq_Suppliers_Public;
+        INSERT INTO Purchasing.Suppliers_Public (
+            BranchID, SupplierID, SupplierName, SupplierCategoryID, DeliveryMethodID, SupplierReference, PaymentDays, LastEditedBy
+        ) VALUES (
+            1,
+            @NuevoSupplierID,
             LTRIM(RTRIM(@SupplierName)),
             @CategoryID,
+            @DeliveryMethodID,
+            LTRIM(RTRIM(@SupplierReference)),
+            @PaymentDays,
+            1
+        );
+        INSERT INTO Purchasing.Suppliers_Private (
+            BranchID, SupplierID, PrimaryContactPersonID, AlternateContactPersonID, DeliveryCityID, PostalCityID, BankAccountName, BankAccountBranch, BankAccountCode, BankAccountNumber, BankInternationalCode, InternalComments, PhoneNumber, FaxNumber, WebsiteURL, DeliveryAddressLine1, DeliveryAddressLine2, DeliveryPostalCode, DeliveryLocation, PostalAddressLine1, PostalAddressLine2, PostalPostalCode
+        ) VALUES (
+            1,
+            @NuevoSupplierID,
             @PrimaryContactPersonID,
             @AlternateContactPersonID,
-            @DeliveryMethodID,
             @CityID,
             @CityID,
-            LTRIM(RTRIM(@SupplierReference)),
             ISNULL(NULLIF(LTRIM(RTRIM(@BankAccountName)), ''), 'N/A'),
             'N/A',
             'N/A',
             ISNULL(NULLIF(LTRIM(RTRIM(@BankAccountNumber)), ''), 'N/A'),
             'N/A',
-            @PaymentDays,
             '',
             ISNULL(NULLIF(LTRIM(RTRIM(@PhoneNumber)), ''), 'N/A'),
             ISNULL(NULLIF(LTRIM(RTRIM(@FaxNumber)), ''), 'N/A'),
@@ -298,11 +337,8 @@ BEGIN
             @Location,
             ISNULL(NULLIF(LTRIM(RTRIM(@PostalAddressLine1)), ''), 'N/A'),
             ISNULL(NULLIF(LTRIM(RTRIM(@PostalAddressLine2)), ''), 'N/A'),
-            ISNULL(NULLIF(LTRIM(RTRIM(@PostalPostalCode)), ''), 'N/A'),
-            1
+            ISNULL(NULLIF(LTRIM(RTRIM(@PostalPostalCode)), ''), 'N/A')
         );
-
-        SET @NuevoSupplierID = SCOPE_IDENTITY();
 
         COMMIT TRANSACTION;
 
@@ -323,7 +359,7 @@ GO
 -- Retorno    : ninguno
 -- Descripción: Actualización del proveedor
 -- ================================================================
-CREATE OR ALTER PROCEDURE ActualizarProveedor
+CREATE OR ALTER PROCEDURE dbo.ActualizarProveedor
     @SupplierID INT,
     @SupplierName NVARCHAR(100),
     @SupplierCategoryName NVARCHAR(50),
@@ -349,6 +385,37 @@ CREATE OR ALTER PROCEDURE ActualizarProveedor
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[ActualizarProveedor]
+                @SupplierID = @SupplierID,
+                @SupplierName = @SupplierName,
+                @SupplierCategoryName = @SupplierCategoryName,
+                @PrimaryContactPersonName = @PrimaryContactPersonName,
+                @AlternateContactPersonName = @AlternateContactPersonName,
+                @DeliveryMethodName = @DeliveryMethodName,
+                @CityName = @CityName,
+                @SupplierReference = @SupplierReference,
+                @DeliveryAddressLine1 = @DeliveryAddressLine1,
+                @DeliveryAddressLine2 = @DeliveryAddressLine2,
+                @DeliveryPostalCode = @DeliveryPostalCode,
+                @PostalAddressLine1 = @PostalAddressLine1,
+                @PostalAddressLine2 = @PostalAddressLine2,
+                @PostalPostalCode = @PostalPostalCode,
+                @Latitud = @Latitud,
+                @Longitud = @Longitud,
+                @PhoneNumber = @PhoneNumber,
+                @FaxNumber = @FaxNumber,
+                @WebsiteURL = @WebsiteURL,
+                @BankAccountName = @BankAccountName,
+                @BankAccountNumber = @BankAccountNumber,
+                @PaymentDays = @PaymentDays;
+        RETURN;
+    END;
+
 
     DECLARE
         @CategoryID INT,
@@ -390,12 +457,15 @@ BEGIN
 
         IF @CategoryID IS NULL
         BEGIN
-            INSERT INTO syn_CategoriasProveedor
-                (SupplierCategoryName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@SupplierCategoryName)), 1);
-
-            SET @CategoryID = SCOPE_IDENTITY();
+            SET @CategoryID = NEXT VALUE FOR Repl.seq_SupplierCategories;
+        INSERT INTO syn_CategoriasProveedor (
+            BranchID, SupplierCategoryID, SupplierCategoryName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @CategoryID,
+            LTRIM(RTRIM(@SupplierCategoryName)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -405,12 +475,15 @@ BEGIN
 
         IF @DeliveryMethodID IS NULL
         BEGIN
-            INSERT INTO syn_MetodosEntrega
-                (DeliveryMethodName, LastEditedBy)
-            VALUES
-                (LTRIM(RTRIM(@DeliveryMethodName)), 1);
-
-            SET @DeliveryMethodID = SCOPE_IDENTITY();
+            SET @DeliveryMethodID = NEXT VALUE FOR Repl.seq_DeliveryMethods;
+        INSERT INTO syn_MetodosEntrega (
+            BranchID, DeliveryMethodID, DeliveryMethodName, LastEditedBy
+        ) VALUES (
+            dbo.fn_BranchIDLocal(),
+            @DeliveryMethodID,
+            LTRIM(RTRIM(@DeliveryMethodName)),
+            1
+        );
         END;
 
         SELECT TOP (1)
@@ -447,31 +520,33 @@ BEGIN
         ELSE
             SET @Location = geography::Point(0, 0, 4326);
 
-        UPDATE syn_Proveedores
-        SET
-            SupplierName = LTRIM(RTRIM(@SupplierName)),
+        DECLARE @Origen INT = (SELECT BranchID FROM Purchasing.Suppliers_Public WHERE SupplierID = @SupplierID);
+        IF @Origen IS NULL THROW 50042, 'El registro indicado no existe.', 1;
+        UPDATE Purchasing.Suppliers_Public SET SupplierName = LTRIM(RTRIM(@SupplierName)),
             SupplierCategoryID = @CategoryID,
-            PrimaryContactPersonID = @PrimaryContactPersonID,
-            AlternateContactPersonID = @AlternateContactPersonID,
             DeliveryMethodID = @DeliveryMethodID,
+            SupplierReference = LTRIM(RTRIM(@SupplierReference)),
+            PaymentDays = @PaymentDays,
+            LastEditedBy = 1
+        WHERE BranchID = @Origen AND SupplierID = @SupplierID;
+        UPDATE Purchasing.Suppliers_Private SET PrimaryContactPersonID = @PrimaryContactPersonID,
+            AlternateContactPersonID = @AlternateContactPersonID,
             DeliveryCityID = @CityID,
             PostalCityID = @CityID,
-            SupplierReference = LTRIM(RTRIM(@SupplierReference)),
             PhoneNumber = ISNULL(NULLIF(LTRIM(RTRIM(@PhoneNumber)), ''), 'N/A'),
             FaxNumber = ISNULL(NULLIF(LTRIM(RTRIM(@FaxNumber)), ''), 'N/A'),
             WebsiteURL = ISNULL(NULLIF(LTRIM(RTRIM(@WebsiteURL)), ''), ''),
             BankAccountName = ISNULL(NULLIF(LTRIM(RTRIM(@BankAccountName)), ''), 'N/A'),
             BankAccountNumber = ISNULL(NULLIF(LTRIM(RTRIM(@BankAccountNumber)), ''), 'N/A'),
-            PaymentDays = @PaymentDays,
             DeliveryAddressLine1 = ISNULL(NULLIF(LTRIM(RTRIM(@DeliveryAddressLine1)), ''), 'N/A'),
             DeliveryAddressLine2 = ISNULL(NULLIF(LTRIM(RTRIM(@DeliveryAddressLine2)), ''), 'N/A'),
             DeliveryPostalCode = ISNULL(NULLIF(LTRIM(RTRIM(@DeliveryPostalCode)), ''), 'N/A'),
             DeliveryLocation = @Location,
             PostalAddressLine1 = ISNULL(NULLIF(LTRIM(RTRIM(@PostalAddressLine1)), ''), 'N/A'),
             PostalAddressLine2 = ISNULL(NULLIF(LTRIM(RTRIM(@PostalAddressLine2)), ''), 'N/A'),
-            PostalPostalCode = ISNULL(NULLIF(LTRIM(RTRIM(@PostalPostalCode)), ''), 'N/A'),
-            LastEditedBy = 1
-        WHERE SupplierID = @SupplierID;
+            PostalPostalCode = ISNULL(NULLIF(LTRIM(RTRIM(@PostalPostalCode)), ''), 'N/A')
+        WHERE BranchID = @Origen AND SupplierID = @SupplierID;
+        IF @@ROWCOUNT <> 1 THROW 50049, 'Falta el fragmento privado en Corporativo; revise la migracion.', 1;
 
         COMMIT TRANSACTION;
     END TRY
@@ -489,11 +564,21 @@ GO
 -- Parámetros : @SupplierID
 -- Retorno    : ninguno
 -- ================================================================
-CREATE OR ALTER PROCEDURE EliminarProveedor
+CREATE OR ALTER PROCEDURE dbo.EliminarProveedor
     @SupplierID INT
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF dbo.fn_BranchIDLocal() <> 1
+    BEGIN
+        IF @@TRANCOUNT <> 0
+            THROW 50041, 'Ejecute la operacion remota fuera de una transaccion local.', 1;
+        EXEC [nodo_corporativo].[WWI_Corporativo].[dbo].[EliminarProveedor]
+                @SupplierID = @SupplierID;
+        RETURN;
+    END;
+
 
     IF NOT EXISTS (
         SELECT 1
@@ -502,11 +587,15 @@ BEGIN
     )
         THROW 50027, 'El proveedor indicado no existe.', 1;
 
-    BEGIN TRY
-        BEGIN TRANSACTION;
+    EXEC dbo.sp_ValidarEliminacionGlobal @Entidad = 'Proveedor', @ID = @SupplierID;
 
-        DELETE FROM syn_Proveedores
-        WHERE SupplierID = @SupplierID;
+    BEGIN TRY
+        SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+        BEGIN TRANSACTION;
+        EXEC dbo.sp_ValidarEliminacionLocal @Entidad = 'Proveedor', @ID = @SupplierID;
+
+        DELETE FROM Purchasing.Suppliers_Private WHERE SupplierID = @SupplierID;
+        DELETE FROM Purchasing.Suppliers_Public WHERE SupplierID = @SupplierID;
 
         COMMIT TRANSACTION;
     END TRY

@@ -64,14 +64,14 @@ const formatearFecha = (fecha) => {
  * Presenta el listado, filtros y formularios del módulo de ventas.
  * @param {object} props Manejadores globales de errores.
  * @param {Function} props.onErrorNotificacion Notifica errores al usuario.
- * @param {Function} props.onErrorOcultarModulo Oculta el módulo ante errores críticos.
+ * @param {Function} props.onErrorOcultarInterfaz Oculta la interfaz ante errores críticos.
  * @param {Function} props.onVolverCentroGestion Regresa al centro de gestión.
  * @returns {JSX.Element} Interfaz de administración de ventas.
  * @throws {Error} Si ocurre un error no controlado durante la ejecución.
  */
 export default function Ventas({
   onErrorNotificacion,
-  onErrorOcultarModulo,
+  onErrorOcultarInterfaz,
   onVolverCentroGestion,
 }) {
   const [ventas, setVentas] = useState([]);
@@ -118,7 +118,7 @@ export default function Ventas({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar ventas",
       );
     }
@@ -145,7 +145,7 @@ export default function Ventas({
         mostrarError(
           resultadoVentas.reason,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar ventas",
         );
       }
@@ -156,7 +156,7 @@ export default function Ventas({
         mostrarError(
           resultadoOpciones.reason,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar opciones de ventas",
         );
       }
@@ -165,7 +165,7 @@ export default function Ventas({
     return () => {
       activo = false;
     };
-  }, [onErrorNotificacion, onErrorOcultarModulo]);
+  }, [onErrorNotificacion, onErrorOcultarInterfaz]);
 
   /**
    * Limpia todos los filtros y vuelve a cargar la lista completa.
@@ -191,7 +191,7 @@ export default function Ventas({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el detalle de la venta",
       );
     }
@@ -212,7 +212,7 @@ export default function Ventas({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el detalle del cliente de la venta",
       );
     }
@@ -233,7 +233,7 @@ export default function Ventas({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el detalle del producto de la venta",
       );
     }
@@ -265,7 +265,7 @@ export default function Ventas({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar la venta para editar",
       );
     }
@@ -319,7 +319,7 @@ export default function Ventas({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al guardar la venta",
       );
       if (invoiceId) {

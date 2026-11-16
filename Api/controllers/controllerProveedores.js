@@ -49,12 +49,25 @@ const getOpcionesCategoriasProveedor = async (req, res) => {
  * Verifica que la API pueda abrir una conexión a SQL Server.
  * @param {import('express').Request} req Solicitud HTTP.
  * @param {import('express').Response} res Respuesta HTTP.
- * @returns {Promise<void>} Respuesta JSON con el estado de conexión.
+ * @returns {Promise<void>} Respuesta JSON con el estado, servidor y base actual.
  */
 const getVerificarConexionBD = async (req, res) => {
   try {
-    await conectarBaseDatos();
-    res.json({ conectado: true });
+    const pool = await conectarBaseDatos();
+    const resultado = await pool
+      .request()
+      .execute("dbo.sp_ObtenerInfoServidorActual");
+    const conexion = resultado.recordset[0];
+
+    if (!conexion?.servidor || !conexion?.baseDatos) {
+      throw new Error("No se pudo identificar el servidor actual.");
+    }
+
+    res.json({
+      conectado: true,
+      servidor: conexion.servidor,
+      baseDatos: conexion.baseDatos,
+    });
   } catch (err) {
     manejarError(res, err);
   }

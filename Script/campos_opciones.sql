@@ -1,5 +1,16 @@
-USE WideWorldImporters;
+-- Ejecutar conectado a cada base WWI; no usar la base original WideWorldImporters.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_WARNINGS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
 GO
+IF DB_NAME() NOT IN (N'WWI_Corporativo', N'WWI_SanJose', N'WWI_Limon')
+    THROW 50040, 'Conectese a WWI_Corporativo, WWI_SanJose o WWI_Limon.', 1;
+GO
+
 
 /*
   En casi todos los procedimientos, deben retornarse OpcionID y Etiqueta porque el componente AutocompletePaginado 
@@ -13,7 +24,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesCiudades
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesCiudades
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesCiudades
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -55,7 +66,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesMetodosEntrega
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesMetodosEntrega
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesMetodosEntrega
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -83,7 +94,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesGruposCompra
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesGruposCompra
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesGruposCompra
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -111,7 +122,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesCategoriasClientes
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesCategoriasClientes
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesCategoriasClientes
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -139,7 +150,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesContactos
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesContactos
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesContactos
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -167,7 +178,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesClientes
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesClientes
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesClientes
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -196,7 +207,7 @@ PROCEDIMIENTO: ObtenerOpcionesFormularioCliente
 Devuelve las categorías y los métodos de entrega usados en filtros.
 ============================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesFormularioCliente
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesFormularioCliente
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -217,7 +228,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesCategoriasProveedor
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesCategoriasProveedor
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesCategoriasProveedor
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -246,7 +257,7 @@ PROCEDIMIENTO: ObtenerOpcionesFormularioProveedor
 Obtener opciones del formulario de proveedor
 ================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesFormularioProveedor
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesFormularioProveedor
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -271,7 +282,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesProveedores
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesProveedores
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesProveedores
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -299,7 +310,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesProductos
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesProductos
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesProductos
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -329,7 +340,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesGruposProducto
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesGruposProducto
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesGruposProducto
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -357,7 +368,7 @@ GO
 PROCEDIMIENTO: ObtenerOpcionesEmpaques
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesEmpaques
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesEmpaques
     @Busqueda NVARCHAR(100) = NULL,
     @ID INT = NULL,
     @Pagina INT = 0,
@@ -386,7 +397,7 @@ PROCEDIMIENTO: ObtenerOpcionesFormularioVenta
 Devuelve el método de entrega para filtrar la lista de ventas.
 ================================================================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesFormularioVenta
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesFormularioVenta
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -404,7 +415,7 @@ PROCEDIMIENTO: ObtenerOpcionesFiltrosReportes
 Se utiliza para filtrar por año en los reportes de facturas y órdenes de compra.
 ==========================================
 */
-CREATE OR ALTER PROCEDURE ObtenerOpcionesFiltrosReportes
+CREATE OR ALTER PROCEDURE dbo.ObtenerOpcionesFiltrosReportes
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -428,7 +439,7 @@ GO
 -- Retorno    : años presentes en facturas u órdenes de compra.
 -- Se utiliza para ver en cuáles años se pueden filtrar los reportes que agrupan por año.
 -- ================================================================
-CREATE OR ALTER PROCEDURE ObtenerAniosReportes
+CREATE OR ALTER PROCEDURE dbo.ObtenerAniosReportes
 AS
 BEGIN
     SET NOCOUNT ON;

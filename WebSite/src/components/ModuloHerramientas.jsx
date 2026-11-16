@@ -1,7 +1,7 @@
 export const API_URL = "http://localhost:3000";
 
 /** Verifica que la API pueda conectarse con la base de datos.
- * @returns {Promise<void>} Se resuelve si la conexión está disponible.
+ * @returns {Promise<{servidor: string, baseDatos: string}>} Información del servidor conectado.
  * @throws {Error} Si falla la solicitud o la base de datos no está conectada.
  */
 export const verificarConexionBD = async () => {
@@ -15,19 +15,33 @@ export const verificarConexionBD = async () => {
     const error = new Error(
       data.errorMsg || "No se pudo verificar la conexión con la base de datos.",
     );
-    error.ocultarModulo = data.esErrorCriticoBD;
+    error.ocultarInterfaz = data.esErrorCriticoBD;
     throw error;
   }
 
   if (!data.conectado) {
     throw new Error("No se pudo verificar la conexión con la base de datos.");
   }
+
+  if (
+    typeof data.servidor !== "string" ||
+    !data.servidor.trim() ||
+    typeof data.baseDatos !== "string" ||
+    !data.baseDatos.trim()
+  ) {
+    throw new Error("No se pudo identificar el servidor actual.");
+  }
+
+  return {
+    servidor: data.servidor.trim(),
+    baseDatos: data.baseDatos.trim(),
+  };
 };
 
-/** Clasifica el error y lo presenta como notificación u ocultamiento del módulo.
+/** Clasifica el error y lo presenta como notificación u ocultamiento de la interfaz.
  * @param {Error} error Error que se desea informar.
  * @param {Function} onErrorNotificacion Manejador de notificaciones visibles.
- * @param {Function} onErrorOcultarModulo Manejador de errores críticos.
+ * @param {Function} onErrorOcultarInterfaz Manejador de errores críticos.
  * @param {string} contexto Descripción de la operación que falló.
  * @returns {void} Informa el error al manejador correspondiente.
  * @throws {TypeError} Si los manejadores requeridos no son funciones.
@@ -35,7 +49,7 @@ export const verificarConexionBD = async () => {
 export const mostrarError = (
   error,
   onErrorNotificacion,
-  onErrorOcultarModulo,
+  onErrorOcultarInterfaz,
   contexto = "",
 ) => {
   const mensajeError = error.message || String(error);
@@ -45,11 +59,11 @@ export const mostrarError = (
     : mensajeError;
   if (etiquetaContexto) console.error(`${etiquetaContexto}:`, error);
   if (
-    error.ocultarModulo ||
+    error.ocultarInterfaz ||
     error.esErrorCriticoBD ||
     error instanceof TypeError
   ) {
-    onErrorOcultarModulo(mensaje);
+    onErrorOcultarInterfaz(mensaje);
   } else {
     onErrorNotificacion(mensaje);
   }

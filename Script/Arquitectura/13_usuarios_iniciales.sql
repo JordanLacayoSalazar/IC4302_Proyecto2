@@ -1,11 +1,4 @@
--- ¡¡¡ ADVERTENCIA !!! --
-/*
-    Primero se deben ejecutar los primeros 11 archivos SQL de la carpeta Arquitectura para
-    crear la tabla de usuarios y poder agregarlos correctamente.
-    Una vez ejecutados, se puede ejecutar lo siguiente:
-*/
-
--- UBÍQUESE EN EL NODO CORPORATIVO.
+-- Ubíquese en el nodo corporativo.
 
 USE WWI_Corporativo;
 GO
@@ -27,7 +20,6 @@ EXEC dbo.sp_InsertUser
     @Role = 'Corporativo',
     @Email = 'jordan@email.com',
     @HireDate = '2026-11-15';
-
 
 EXEC dbo.sp_InsertUser
     @BranchID = 3, -- Limón

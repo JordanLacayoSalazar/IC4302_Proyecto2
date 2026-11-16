@@ -67,7 +67,7 @@ const FORMULARIO_INICIAL = {
  */
 export default function Inventario({
   onErrorNotificacion,
-  onErrorOcultarModulo,
+  onErrorOcultarInterfaz,
   onVolverCentroGestion,
 }) {
   const [productos, setProductos] = useState([]);
@@ -107,7 +107,7 @@ export default function Inventario({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar productos del inventario",
       );
     }
@@ -138,7 +138,7 @@ export default function Inventario({
         mostrarError(
           resultadoProductos.reason,
           onErrorNotificacion,
-          onErrorOcultarModulo,
+          onErrorOcultarInterfaz,
           "Error al cargar productos del inventario",
         );
       }
@@ -150,7 +150,7 @@ export default function Inventario({
     return () => {
       activo = false;
     };
-  }, [onErrorNotificacion, onErrorOcultarModulo]);
+  }, [onErrorNotificacion, onErrorOcultarInterfaz]);
 
 
 
@@ -180,7 +180,7 @@ export default function Inventario({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el detalle del producto",
       );
     }
@@ -236,7 +236,7 @@ export default function Inventario({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al cargar el producto para editar",
       );
     }
@@ -304,7 +304,7 @@ export default function Inventario({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al guardar el producto",
       );
     }
@@ -340,7 +340,7 @@ export default function Inventario({
       mostrarError(
         error,
         onErrorNotificacion,
-        onErrorOcultarModulo,
+        onErrorOcultarInterfaz,
         "Error al eliminar el producto",
       );
     }
